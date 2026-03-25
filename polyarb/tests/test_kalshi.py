@@ -27,8 +27,9 @@ def test_parse_price_garbage():
     assert _parse_price("abc") is None
 
 
-def test_parse_price_rejects_above_one():
-    """Kalshi prices are probabilities — values > 1.0 are nonsensical."""
+def test_parse_price_rejects_at_or_above_one():
+    """Kalshi prices are probabilities in (0, 1.0) — 1.0 is not valid."""
+    assert _parse_price("1.0") is None
     assert _parse_price("42") is None
     assert _parse_price("1.50") is None
     assert _parse_price("100") is None

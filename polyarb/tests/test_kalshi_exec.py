@@ -159,6 +159,7 @@ class FakeClient:
         self.demo = demo
         self._balance = balance
         self.orders_placed: list[dict] = []
+        self.cancelled_ids: list[str] = []
 
     def get_balance(self) -> float:
         return self._balance
@@ -171,6 +172,10 @@ class FakeClient:
             "fill_count_fp": str(kwargs.get("count", 0)),
             "remaining_count_fp": "0",
         }
+
+    def cancel_order(self, order_id: str) -> dict:
+        self.cancelled_ids.append(order_id)
+        return {"order": {"status": "canceled"}}
 
 
 def _make_order_set() -> OrderSet:
@@ -230,18 +235,23 @@ def test_executor_tracks_trades_and_profit():
     assert executor.total_profit == os.expected_profit
 
 
-def test_executor_handles_order_failure():
-    class FailingClient(FakeClient):
+def test_executor_cancels_on_partial_failure():
+    """If leg 2 fails, leg 1's order should be cancelled."""
+
+    class FailSecondLeg(FakeClient):
         def create_order(self, **kwargs):
             if len(self.orders_placed) == 1:
                 raise RuntimeError("API error")
             return super().create_order(**kwargs)
 
-    client = FailingClient(balance=100.0)
+    client = FailSecondLeg(balance=100.0)
     executor = KalshiExecutor(client=client)
     os = _make_order_set()
 
     result = executor.execute(os)
 
     assert result is False
-    assert len(executor.trades) == 0  # Not added on failure
+    assert len(executor.trades) == 0
+    # First order was placed, then second failed, so first should be cancelled
+    assert len(client.orders_placed) == 1
+    assert client.cancelled_ids == ["fake-1"]

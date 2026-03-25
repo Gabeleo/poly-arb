@@ -29,10 +29,13 @@ pytest polyarb/tests/test_single.py::test_underprice_detected -v
 python -m polyarb
 
 # Run CLI (live Polymarket data)
-python -m polyarb --live
+python -m polyarb --poly
+
+# Run CLI (live Kalshi data)
+python -m polyarb --kalshi
 
 # Docker (interactive — requires `run`, not `up`)
-docker compose run --build polyarb --live
+docker compose run --build polyarb --poly
 ```
 
 ## Architecture

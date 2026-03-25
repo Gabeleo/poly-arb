@@ -59,6 +59,7 @@ class PolyarbShell(cmd.Cmd):
 
         self._markets: list[Market] = []
         self._opps: list[tuple[Opportunity, OrderSet]] = []
+        self._cross_matches: list[MatchedPair] = []
 
     # ── Data ──────────────────────────────────────────────────
 
@@ -420,7 +421,11 @@ class PolyarbShell(cmd.Cmd):
 
         Usage: cross [min_confidence]   (default 0.5, range 0.0-1.0)
         """
-        min_conf = float(arg) if arg.strip() else 0.5
+        try:
+            min_conf = float(arg) if arg.strip() else 0.5
+        except ValueError:
+            print(f"{RED}Usage: cross [min_confidence]  (e.g. cross 0.6){R}")
+            return
 
         print(f"{DIM}Fetching from Polymarket...{R}")
         try:

@@ -3,4 +3,4 @@ services:
     build: .
     stdin_open: true
     tty: true
-    command: ["--live"]
+    command: ["--poly"]

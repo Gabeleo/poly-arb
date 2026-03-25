@@ -213,7 +213,9 @@ class KalshiExecutor:
         env = "DEMO" if self.client.demo else "PRODUCTION"
         print(f"\033[93m  Placing {len(order_set.orders)} orders on Kalshi ({env})...\033[0m")
 
-        results: list[dict | None] = []
+        placed_order_ids: list[str] = []
+        failed = False
+
         for order in order_set.orders:
             ticker = order.token_id.rsplit(":", 1)[0]
             side = order.side.value.lower()
@@ -232,27 +234,39 @@ class KalshiExecutor:
                 status = result.get("status", "unknown")
                 filled = result.get("fill_count_fp", "0")
                 remaining = result.get("remaining_count_fp", "?")
+                order_id = result.get("order_id", "")
+                if order_id:
+                    placed_order_ids.append(order_id)
                 print(
                     f"    {action.upper()} {count}x {side.upper()} "
                     f"{ticker} @ ${order.price:.2f} "
                     f"\u2192 {status} (filled={filled}, remaining={remaining})"
                 )
-                results.append(result)
             except Exception as e:
                 print(f"\033[91m    \u2717 {action.upper()} {side.upper()} {ticker}: {e}\033[0m")
-                results.append(None)
+                failed = True
+                break  # Stop placing further legs
 
-        ok = all(r is not None for r in results)
-        if ok:
-            self.trades.append(order_set)
-            self.total_profit += order_set.expected_profit
+        if failed and placed_order_ids:
+            print("\033[91m  Cancelling previously placed orders...\033[0m")
+            for oid in placed_order_ids:
+                try:
+                    self.client.cancel_order(oid)
+                    print(f"    Cancelled {oid}")
+                except Exception as e:
+                    print(f"\033[91m    Cancel {oid} failed: {e} — check manually\033[0m")
+
+        if failed:
             print(
-                f"\033[92m  \u2713 All orders placed. "
-                f"Expected profit: ${order_set.expected_profit:.4f}\033[0m"
+                "\033[91m  \u26a0 Order set aborted. "
+                "Check positions for any partial fills.\033[0m"
             )
-        else:
-            print(
-                "\033[91m  \u26a0 Some orders failed. "
-                "Check positions manually.\033[0m"
-            )
-        return ok
+            return False
+
+        self.trades.append(order_set)
+        self.total_profit += order_set.expected_profit
+        print(
+            f"\033[92m  \u2713 All orders placed. "
+            f"Expected profit: ${order_set.expected_profit:.4f}\033[0m"
+        )
+        return True

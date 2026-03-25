@@ -37,7 +37,7 @@ def _parse_price(val: str | None) -> float | None:
         return None
     try:
         p = float(val)
-        return p if 0 < p <= 1.0 else None
+        return p if 0 < p < 1.0 else None
     except (ValueError, TypeError):
         return None
 
