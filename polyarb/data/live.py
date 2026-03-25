@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import json
+import ssl
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = None  # use system defaults
 
 from polyarb.models import Event, Market, Side, Token
 
@@ -82,7 +89,7 @@ class LiveDataProvider:
             "Accept": "application/json",
             "User-Agent": "polyarb/0.1",
         })
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15, context=_SSL_CTX) as resp:
             return json.loads(resp.read())
 
     def get_active_markets(self) -> list[Market]:
