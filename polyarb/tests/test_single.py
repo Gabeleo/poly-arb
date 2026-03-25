@@ -20,7 +20,7 @@ def test_normal_market_no_arb():
 
 def test_underprice_detected():
     config = Config(min_profit=0.005)
-    # YES=0.40, NO=0.52 → sum=0.92, deviation=-0.08
+    # YES ask=0.41, NO ask=0.53 → buy cost=0.94, profit=0.06
     markets = [_market(0.40, 0.52)]
     opps = detect_single(markets, config)
     assert len(opps) == 1
@@ -30,7 +30,7 @@ def test_underprice_detected():
 
 def test_overprice_detected():
     config = Config(min_profit=0.005)
-    # YES=0.55, NO=0.52 → sum=1.07, deviation=+0.07
+    # YES bid=0.54, NO bid=0.51 → sell proceeds=1.05, profit=0.05
     markets = [_market(0.55, 0.52)]
     opps = detect_single(markets, config)
     assert len(opps) == 1
@@ -47,7 +47,8 @@ def test_high_prob_filtered():
 
 def test_below_threshold_ignored():
     config = Config(min_profit=0.01)
-    # YES=0.50, NO=0.495 → sum=0.995, deviation=-0.005 < threshold
+    # YES ask=0.51, NO ask=0.505 → buy cost=1.015 (not underprice)
+    # YES bid=0.49, NO bid=0.485 → sell=0.975 (not overprice)
     markets = [_market(0.50, 0.495)]
     assert detect_single(markets, config) == []
 
@@ -56,13 +57,13 @@ def test_profit_calculation_underprice():
     config = Config(min_profit=0.005)
     markets = [_market(0.40, 0.52)]
     opps = detect_single(markets, config)
-    # sum = 0.92, profit = 0.08
-    assert abs(opps[0].expected_profit_per_share - 0.08) < 0.001
+    # buy cost = 0.41 + 0.53 = 0.94, profit = 0.06
+    assert abs(opps[0].expected_profit_per_share - 0.06) < 0.001
 
 
 def test_profit_calculation_overprice():
     config = Config(min_profit=0.005)
     markets = [_market(0.55, 0.52)]
     opps = detect_single(markets, config)
-    # sum = 1.07, profit = 0.07
-    assert abs(opps[0].expected_profit_per_share - 0.07) < 0.001
+    # sell proceeds = 0.54 + 0.51 = 1.05, profit = 0.05
+    assert abs(opps[0].expected_profit_per_share - 0.05) < 0.001

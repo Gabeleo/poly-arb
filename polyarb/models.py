@@ -73,10 +73,10 @@ class Event:
         return sum(m.yes_token.midpoint for m in self.markets)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Opportunity:
     arb_type: ArbType
-    markets: list[Market]
+    markets: tuple[Market, ...]
     event: Event | None = None
     expected_profit_per_share: float = 0.0
 

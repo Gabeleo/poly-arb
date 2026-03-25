@@ -4,7 +4,9 @@ import cmd
 import shutil
 from datetime import datetime, timezone
 
+from polyarb.colors import BOLD as B, CYAN, DIM, GREEN, RED, RESET as R, YELLOW
 from polyarb.config import Config
+from polyarb.data.base import group_events
 from polyarb.data.live import LiveDataProvider
 from polyarb.data.mock import MockDataProvider
 from polyarb.engine.multi import detect_multi
@@ -12,15 +14,6 @@ from polyarb.engine.single import detect_single
 from polyarb.execution.executor import MockExecutor
 from polyarb.execution.orders import build_order_set
 from polyarb.models import Market, Opportunity, OrderSet
-
-# ANSI
-B = "\033[1m"
-R = "\033[0m"
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-CYAN = "\033[96m"
-DIM = "\033[2m"
 
 
 def _link(url: str, text: str) -> str:
@@ -68,7 +61,8 @@ class PolyarbShell(cmd.Cmd):
         except Exception as e:
             print(f"{RED}Fetch failed: {e}{R}")
             return
-        print(f"{GREEN}Loaded {len(self._markets)} markets (by volume, increasing).{R}")
+        print(f"{GREEN}Loaded {len(self._markets)} markets (by volume, increasing).{R}\n")
+        self.do_markets("")
 
     # ── Views ─────────────────────────────────────────────────
 
@@ -158,7 +152,7 @@ class PolyarbShell(cmd.Cmd):
         if not self._markets:
             print(f"{YELLOW}No markets loaded. Run {B}fetch{R}{YELLOW} first.{R}")
             return
-        events = self.provider.get_events()
+        events = group_events(self._markets)
         single = detect_single(self._markets, self.config)
         multi = detect_multi(events, self.config)
         all_opps = single + multi

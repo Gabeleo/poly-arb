@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import ssl
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -13,9 +14,11 @@ try:
 except ImportError:
     _SSL_CTX = None  # use system defaults
 
+from polyarb.data.base import group_events
 from polyarb.models import Event, Market, Side, Token
 
 GAMMA_API = "https://gamma-api.polymarket.com"
+_DEFAULT_SPREAD = 0.02
 
 
 def _parse_dt(s: str | None) -> datetime | None:
@@ -41,8 +44,10 @@ def _parse_market(raw: dict) -> Market | None:
     yes_mid = float(prices[0])
     no_mid = float(prices[1])
 
-    best_bid = float(raw.get("bestBid") or yes_mid)
-    best_ask = float(raw.get("bestAsk") or yes_mid)
+    raw_bid = raw.get("bestBid")
+    raw_ask = raw.get("bestAsk")
+    best_bid = float(raw_bid) if raw_bid else round(max(0.001, yes_mid - _DEFAULT_SPREAD / 2), 4)
+    best_ask = float(raw_ask) if raw_ask else round(min(0.999, yes_mid + _DEFAULT_SPREAD / 2), 4)
 
     event_slug = ""
     events = raw.get("events") or []
@@ -80,11 +85,10 @@ class LiveDataProvider:
     def __init__(self, limit: int = 100) -> None:
         self._limit = limit
 
-    def _fetch_json(self, path: str, params: dict | None = None) -> list[dict]:
+    def _fetch_json(self, path: str, params: dict | None = None) -> list | dict:
         url = f"{GAMMA_API}{path}"
         if params:
-            qs = "&".join(f"{k}={v}" for k, v in params.items())
-            url = f"{url}?{qs}"
+            url = f"{url}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={
             "Accept": "application/json",
             "User-Agent": "polyarb/0.1",
@@ -93,32 +97,24 @@ class LiveDataProvider:
             return json.loads(resp.read())
 
     def get_active_markets(self) -> list[Market]:
-        raw_list = self._fetch_json("/markets", {
+        data = self._fetch_json("/markets", {
             "limit": str(self._limit),
             "order": "volumeNum",
             "ascending": "false",
             "active": "true",
             "closed": "false",
         })
+        raw_list = data if isinstance(data, list) else [data]
         markets = []
         for raw in raw_list:
             m = _parse_market(raw)
             if m is not None:
                 markets.append(m)
-        # Return in increasing volume order as requested
         markets.sort(key=lambda m: m.volume)
         return markets
 
     def get_events(self) -> list[Event]:
-        markets = self.get_active_markets()
-        neg_risk = [m for m in markets if m.neg_risk]
-        events_map: dict[str, list[Market]] = {}
-        for m in neg_risk:
-            events_map.setdefault(m.event_slug, []).append(m)
-        return [
-            Event(slug=slug, title=f"Event: {slug}", markets=tuple(mlist))
-            for slug, mlist in events_map.items()
-        ]
+        return group_events(self.get_active_markets())
 
     def get_expiring_soon(self, within_days: int = 7) -> list[Market]:
         markets = self.get_active_markets()

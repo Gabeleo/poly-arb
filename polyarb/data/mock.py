@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 
+from polyarb.data.base import group_events
 from polyarb.models import Event, Market, Side, Token
 
 
@@ -96,19 +97,4 @@ class MockDataProvider:
         ]
 
     def get_events(self) -> list[Event]:
-        markets = self.get_active_markets()
-        neg_risk = [m for m in markets if m.neg_risk]
-        events_map: dict[str, list[Market]] = {}
-        for m in neg_risk:
-            events_map.setdefault(m.event_slug, []).append(m)
-
-        events = []
-        for slug, mlist in events_map.items():
-            events.append(
-                Event(
-                    slug=slug,
-                    title=f"Event: {slug}",
-                    markets=tuple(mlist),
-                )
-            )
-        return events
+        return group_events(self.get_active_markets())

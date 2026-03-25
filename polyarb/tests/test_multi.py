@@ -20,25 +20,25 @@ def _event(markets: list[Market]) -> Event:
 
 def test_normal_event_no_arb():
     config = Config(min_profit=0.005)
-    # 0.50 + 0.30 + 0.20 = 1.00
+    # YES asks: 0.51+0.31+0.21=1.03 (not underprice)
+    # NO asks: 0.51+0.71+0.81=2.03, (3-1)-2.03=-0.03 (not overprice)
     event = _event([_market("a", 0.50, 0.50), _market("b", 0.30, 0.70), _market("c", 0.20, 0.80)])
     assert detect_multi([event], config) == []
 
 
 def test_underprice_detected():
     config = Config(min_profit=0.005)
-    # 0.40 + 0.30 + 0.20 = 0.90 → deviation=-0.10
+    # YES asks: 0.41+0.31+0.21=0.93 → profit=0.07
     event = _event([_market("a", 0.40, 0.60), _market("b", 0.30, 0.70), _market("c", 0.20, 0.80)])
     opps = detect_multi([event], config)
     assert len(opps) == 1
     assert opps[0].arb_type == ArbType.MULTI_UNDERPRICE
-    assert abs(opps[0].expected_profit_per_share - 0.10) < 0.001
+    assert abs(opps[0].expected_profit_per_share - 0.07) < 0.001
 
 
 def test_overprice_detected():
     config = Config(min_profit=0.005)
-    # YES: 0.50 + 0.40 + 0.20 = 1.10 → overprice
-    # NO: 0.50 + 0.60 + 0.80 = 1.90, payout = 2*$1 = 2.0, profit = 0.10
+    # NO asks: 0.51+0.61+0.81=1.93, (3-1)-1.93=0.07
     event = _event([_market("a", 0.50, 0.50), _market("b", 0.40, 0.60), _market("c", 0.20, 0.80)])
     opps = detect_multi([event], config)
     assert len(opps) == 1

@@ -1,14 +1,7 @@
 from __future__ import annotations
 
+from polyarb.colors import BOLD, CYAN, GREEN, RED, RESET, YELLOW
 from polyarb.models import ArbType, Opportunity, OrderSet
-
-# ANSI colors
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-CYAN = "\033[96m"
-BOLD = "\033[1m"
-RESET = "\033[0m"
 
 ARB_COLOR = {
     ArbType.SINGLE_UNDERPRICE: GREEN,

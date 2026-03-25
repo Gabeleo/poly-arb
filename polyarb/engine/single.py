@@ -7,33 +7,27 @@ from polyarb.models import ArbType, Market, Opportunity
 def detect_single(markets: list[Market], config: Config) -> list[Opportunity]:
     opps: list[Opportunity] = []
     for m in markets:
-        yes_p = m.yes_token.midpoint
-        no_p = m.no_token.midpoint
-
-        if yes_p > config.max_prob or no_p > config.max_prob:
+        if m.yes_token.midpoint > config.max_prob or m.no_token.midpoint > config.max_prob:
             continue
 
-        total = yes_p + no_p
-        deviation = total - 1.0
-
-        if abs(deviation) < config.min_profit:
-            continue
-
-        if deviation < 0:
-            # Underprice: buy YES + buy NO, guaranteed $1 payout
-            profit = abs(deviation)
+        # Underprice: buy YES at ask + buy NO at ask → guaranteed $1 payout
+        buy_cost = m.yes_token.best_ask + m.no_token.best_ask
+        underprice_profit = 1.0 - buy_cost
+        if underprice_profit >= config.min_profit:
             opps.append(Opportunity(
                 arb_type=ArbType.SINGLE_UNDERPRICE,
-                markets=[m],
-                expected_profit_per_share=round(profit, 6),
+                markets=(m,),
+                expected_profit_per_share=round(underprice_profit, 6),
             ))
-        else:
-            # Overprice: sell YES + sell NO, collect > $1
-            profit = deviation
+
+        # Overprice: sell YES at bid + sell NO at bid → pay $1 on resolution
+        sell_proceeds = m.yes_token.best_bid + m.no_token.best_bid
+        overprice_profit = sell_proceeds - 1.0
+        if overprice_profit >= config.min_profit:
             opps.append(Opportunity(
                 arb_type=ArbType.SINGLE_OVERPRICE,
-                markets=[m],
-                expected_profit_per_share=round(profit, 6),
+                markets=(m,),
+                expected_profit_per_share=round(overprice_profit, 6),
             ))
 
     return opps

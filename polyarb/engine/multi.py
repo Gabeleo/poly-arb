@@ -10,37 +10,30 @@ def detect_multi(events: list[Event], config: Config) -> list[Opportunity]:
         if len(event.markets) < 2:
             continue
 
-        # Check max_prob filter on individual markets
         if any(m.yes_token.midpoint > config.max_prob for m in event.markets):
             continue
 
-        yes_sum = event.yes_sum
-        deviation = yes_sum - 1.0
-
-        if abs(deviation) < config.min_profit:
-            continue
-
-        if deviation < 0:
-            # Underprice: buy all YES tokens, one must pay $1
-            profit = abs(deviation)
+        # Underprice: buy all YES at ask, exactly one pays $1
+        yes_ask_sum = sum(m.yes_token.best_ask for m in event.markets)
+        underprice_profit = 1.0 - yes_ask_sum
+        if underprice_profit >= config.min_profit:
             opps.append(Opportunity(
                 arb_type=ArbType.MULTI_UNDERPRICE,
-                markets=list(event.markets),
+                markets=event.markets,
                 event=event,
-                expected_profit_per_share=round(profit, 6),
+                expected_profit_per_share=round(underprice_profit, 6),
             ))
-        else:
-            # Overprice: buy all NO tokens
-            # Cost = sum(NO prices), payout = (N-1) * $1
-            no_sum = sum(m.no_token.midpoint for m in event.markets)
-            n = len(event.markets)
-            profit = (n - 1) - no_sum
-            if profit > config.min_profit:
-                opps.append(Opportunity(
-                    arb_type=ArbType.MULTI_OVERPRICE,
-                    markets=list(event.markets),
-                    event=event,
-                    expected_profit_per_share=round(profit, 6),
-                ))
+
+        # Overprice: buy all NO at ask, (N-1) pay $1
+        no_ask_sum = sum(m.no_token.best_ask for m in event.markets)
+        n = len(event.markets)
+        overprice_profit = (n - 1) - no_ask_sum
+        if overprice_profit >= config.min_profit:
+            opps.append(Opportunity(
+                arb_type=ArbType.MULTI_OVERPRICE,
+                markets=event.markets,
+                event=event,
+                expected_profit_per_share=round(overprice_profit, 6),
+            ))
 
     return opps

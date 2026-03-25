@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import select
 import sys
 import time
 
 from polyarb.alerts.console import ConsoleAlerter
 from polyarb.config import Config
-from polyarb.data.base import DataProvider
+from polyarb.data.base import DataProvider, group_events
 from polyarb.engine.multi import detect_multi
 from polyarb.engine.single import detect_single
 from polyarb.execution.executor import Executor
@@ -25,20 +24,26 @@ class Scanner:
         self.executor = executor
         self.config = config or Config()
         self.alerter = ConsoleAlerter()
-        self._seen: set[str] = set()
+        self._seen: dict[str, float] = {}
         self._active: dict[int, OrderSet] = {}
 
+    def _expire_seen(self) -> None:
+        cutoff = time.monotonic() - self.config.dedup_window
+        self._seen = {k: t for k, t in self._seen.items() if t > cutoff}
+
     def _scan_once(self) -> list[tuple[Opportunity, OrderSet]]:
+        self._expire_seen()
         markets = self.provider.get_active_markets()
-        events = self.provider.get_events()
+        events = group_events(markets)
 
         opps = detect_single(markets, self.config) + detect_multi(events, self.config)
 
         results = []
+        now = time.monotonic()
         for opp in opps:
             if opp.key in self._seen:
                 continue
-            self._seen.add(opp.key)
+            self._seen[opp.key] = now
             order_set = build_order_set(opp, self.config)
             results.append((opp, order_set))
         return results
@@ -55,7 +60,14 @@ class Scanner:
             )
 
     def _check_stdin(self) -> str | None:
-        ready, _, _ = select.select([sys.stdin], [], [], 0.5)
+        if sys.platform == "win32":
+            import msvcrt
+            if msvcrt.kbhit():
+                return sys.stdin.readline().strip()
+            time.sleep(0.5)
+            return None
+        import select as _select
+        ready, _, _ = _select.select([sys.stdin], [], [], 0.5)
         if ready:
             return sys.stdin.readline().strip()
         return None
@@ -81,16 +93,12 @@ class Scanner:
         self.alerter.info("Polyarb scanner started. Press Ctrl+C to quit.\n")
         try:
             while True:
-                # Reset seen keys each cycle to re-detect if prices changed
-                self._seen.clear()
-
                 results = self._scan_once()
                 if results:
                     self._display(results)
                 else:
                     self.alerter.info("No arbitrage opportunities found. Waiting...")
 
-                # Wait for scan_interval, checking stdin periodically
                 deadline = time.monotonic() + self.config.scan_interval
                 while time.monotonic() < deadline:
                     line = self._check_stdin()
