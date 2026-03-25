@@ -1,0 +1,6 @@
+services:
+  polyarb:
+    build: .
+    stdin_open: true
+    tty: true
+    command: ["--live"]
