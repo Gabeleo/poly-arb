@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import cmd
+import os
 import shlex
 import shutil
 from datetime import datetime, timezone
@@ -14,8 +15,8 @@ from polyarb.data.mock import MockDataProvider
 from polyarb.engine.multi import detect_multi
 from polyarb.engine.single import detect_single
 from polyarb.execution.executor import MockExecutor
-from polyarb.matching.matcher import MatchedPair, find_matches
 from polyarb.execution.orders import build_order_set
+from polyarb.matching.matcher import MatchedPair, find_matches
 from polyarb.models import Market, Opportunity, OrderSet
 
 
@@ -291,8 +292,99 @@ class PolyarbShell(cmd.Cmd):
 
     # ── Execution ─────────────────────────────────────────────
 
+    def do_connect(self, arg: str) -> None:
+        """Connect to Kalshi for live order execution.
+
+        Usage: connect [--live]
+
+        Reads credentials from environment variables:
+          KALSHI_API_KEY   — API key ID
+          KALSHI_KEY_FILE  — path to RSA private key PEM file
+
+        Default connects to DEMO. Use 'connect --live' for production.
+        """
+        try:
+            from polyarb.execution.kalshi import KalshiAuth, KalshiClient, KalshiExecutor
+        except ImportError:
+            print(f"{RED}cryptography package required. Install with: pip install cryptography{R}")
+            return
+
+        api_key = os.environ.get("KALSHI_API_KEY", "")
+        key_file = os.environ.get("KALSHI_KEY_FILE", "")
+
+        if not api_key or not key_file:
+            print(f"{RED}Set environment variables first:{R}")
+            print(f"  export KALSHI_API_KEY=your_key_id")
+            print(f"  export KALSHI_KEY_FILE=/path/to/private_key.pem")
+            return
+
+        is_live = arg.strip() == "--live"
+        env = "PRODUCTION" if is_live else "DEMO"
+
+        if is_live:
+            print(f"{RED}{B}  WARNING: Connecting to Kalshi PRODUCTION. Real money!{R}")
+
+        try:
+            auth = KalshiAuth(api_key, key_file)
+            client = KalshiClient(auth, demo=not is_live)
+            balance = client.get_balance()
+            self.executor = KalshiExecutor(client)
+            print(f"{GREEN}  Connected to Kalshi ({env}). Balance: ${balance:,.2f}{R}")
+        except Exception as e:
+            print(f"{RED}  Connection failed: {e}{R}")
+
+    def do_balance(self, arg: str) -> None:
+        """Show Kalshi account balance (requires connect first)."""
+        try:
+            from polyarb.execution.kalshi import KalshiExecutor
+        except ImportError:
+            print(f"{YELLOW}Not available (cryptography not installed).{R}")
+            return
+
+        if not isinstance(self.executor, KalshiExecutor):
+            print(f"{YELLOW}Not connected. Run {B}connect{R}{YELLOW} first.{R}")
+            return
+
+        try:
+            balance = self.executor.client.get_balance()
+            env = "DEMO" if self.executor.client.demo else "LIVE"
+            print(f"\n{B}Kalshi Balance ({env}):{R} ${balance:,.2f}\n")
+        except Exception as e:
+            print(f"{RED}Failed: {e}{R}")
+
+    def do_positions(self, arg: str) -> None:
+        """Show Kalshi positions (requires connect first)."""
+        try:
+            from polyarb.execution.kalshi import KalshiExecutor
+        except ImportError:
+            print(f"{YELLOW}Not available (cryptography not installed).{R}")
+            return
+
+        if not isinstance(self.executor, KalshiExecutor):
+            print(f"{YELLOW}Not connected. Run {B}connect{R}{YELLOW} first.{R}")
+            return
+
+        try:
+            positions = self.executor.client.get_positions(ticker=arg.strip())
+            if not positions:
+                print(f"{YELLOW}No open positions.{R}")
+                return
+            print(f"\n{B}Kalshi Positions:{R}\n")
+            print(f"{'Ticker':<30}  {'Position':>10}  {'Exposure':>12}  {'P&L':>10}")
+            print("─" * 70)
+            for p in positions:
+                pos = p.get("position_fp", "0")
+                exposure = p.get("market_exposure_dollars", "0")
+                pnl = p.get("realized_pnl_dollars", "0")
+                ticker = p.get("ticker", "?")
+                color = GREEN if float(pnl) >= 0 else RED
+                print(f"{color}{ticker:<30}  {pos:>10}  ${float(exposure):>11.2f}  ${float(pnl):>9.2f}{R}")
+            print()
+        except Exception as e:
+            print(f"{RED}Failed: {e}{R}")
+
     def do_execute(self, arg: str) -> None:
-        """Paper-trade an opportunity. Usage: execute <#>"""
+        """Execute an opportunity. Paper-trade unless connected via 'connect'."""
         if not self._opps:
             print(f"{YELLOW}No opportunities. Run {B}scan{R}{YELLOW} first.{R}")
             return
@@ -304,12 +396,12 @@ class PolyarbShell(cmd.Cmd):
         self.executor.execute(os)
 
     def do_portfolio(self, arg: str) -> None:
-        """Show paper trading portfolio and P&L."""
+        """Show trading portfolio and P&L."""
         trades = self.executor.trades
         if not trades:
             print(f"{YELLOW}No trades yet.{R}")
             return
-        print(f"\n{B}Paper Trading Portfolio{R}\n")
+        print(f"\n{B}Trading Portfolio{R}\n")
         print(f"{'#':>4}  {'Type':<20}  {'Profit':>10}  Market")
         print("─" * 80)
         for i, os in enumerate(trades, 1):
