@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import ssl
 import urllib.parse
 import urllib.request
@@ -12,7 +13,12 @@ try:
     import certifi
     _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
-    _SSL_CTX = None  # use system defaults
+    _SSL_CTX = ssl.create_default_context()
+
+# Load proxy / system CA if set (e.g. corporate proxies)
+_extra_ca = os.environ.get("SSL_CERT_FILE")
+if _extra_ca and os.path.isfile(_extra_ca):
+    _SSL_CTX.load_verify_locations(_extra_ca)
 
 from polyarb.data.base import group_events
 from polyarb.models import Event, Market, Side, Token

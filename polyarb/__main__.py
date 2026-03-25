@@ -5,10 +5,12 @@ from polyarb.cli import PolyarbShell
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="polyarb")
-    parser.add_argument("--live", action="store_true", help="Use live Polymarket data")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--poly", action="store_true", help="Use live Polymarket data")
+    source.add_argument("--kalshi", action="store_true", help="Use live Kalshi data")
     args = parser.parse_args()
 
-    shell = PolyarbShell(live=args.live)
+    shell = PolyarbShell(live=args.poly, kalshi=args.kalshi)
     shell.cmdloop()
 
 

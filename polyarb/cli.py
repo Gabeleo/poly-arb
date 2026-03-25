@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from polyarb.colors import BOLD as B, CYAN, DIM, GREEN, RED, RESET as R, YELLOW
 from polyarb.config import Config
 from polyarb.data.base import group_events
+from polyarb.data.kalshi import KalshiDataProvider
 from polyarb.data.live import LiveDataProvider
 from polyarb.data.mock import MockDataProvider
 from polyarb.engine.multi import detect_multi
@@ -31,22 +32,28 @@ def _trunc(s: str, n: int) -> str:
 
 
 class PolyarbShell(cmd.Cmd):
-    intro = (
-        f"\n{B}{CYAN}  polyarb{R} — Polymarket Arbitrage CLI\n"
-        f"  Type {B}help{R} for commands, {B}quit{R} to exit.\n"
-    )
     prompt = f"{B}polyarb> {R}"
 
-    def __init__(self, live: bool = False) -> None:
+    def __init__(self, live: bool = False, kalshi: bool = False) -> None:
         super().__init__()
         self.config = Config()
         self.executor = MockExecutor()
         self.live = live
 
-        if live:
+        if kalshi:
+            self.provider = KalshiDataProvider(limit=100)
+            self._source = "Kalshi"
+        elif live:
             self.provider = LiveDataProvider(limit=10)
+            self._source = "Polymarket"
         else:
             self.provider = MockDataProvider(drift=True)
+            self._source = "mock"
+
+        self.intro = (
+            f"\n{B}{CYAN}  polyarb{R} — {self._source} Arbitrage CLI\n"
+            f"  Type {B}help{R} for commands, {B}quit{R} to exit.\n"
+        )
 
         self._markets: list[Market] = []
         self._opps: list[tuple[Opportunity, OrderSet]] = []
@@ -99,8 +106,7 @@ class PolyarbShell(cmd.Cmd):
             self._print_fetch_usage()
             return
 
-        src = "Polymarket" if self.live else "mock provider"
-        print(f"{DIM}Fetching from {src}...{R}")
+        print(f"{DIM}Fetching from {self._source}...{R}")
 
         try:
             if market_query is not None:
@@ -120,7 +126,7 @@ class PolyarbShell(cmd.Cmd):
 
     def _print_fetch_usage(self) -> None:
         print(f"""
-{B}fetch{R} — Retrieve markets from Polymarket
+{B}fetch{R} — Retrieve markets from {self._source}
 
 {B}Usage:{R}
   fetch --market <name>              Search by name, top 5 by 24h volume
@@ -205,7 +211,9 @@ class PolyarbShell(cmd.Cmd):
         print(f"\n{B}{CYAN}{title}{R}")
         if m.url:
             print(f"  URL          : {DIM}{m.url}{R}")
-        print(f"  Condition ID : {DIM}{m.condition_id[:24]}...{R}")
+        cid = m.condition_id
+        cid_display = f"{cid[:24]}..." if len(cid) > 24 else cid
+        print(f"  Condition ID : {DIM}{cid_display}{R}")
         print(f"  Event        : {m.event_slug or '—'}")
         print(f"  NegRisk      : {m.neg_risk}")
         print(f"  Volume       : ${m.volume:,.2f}")

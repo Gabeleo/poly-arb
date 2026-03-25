@@ -47,10 +47,15 @@ class Market:
     slug: str = ""
     volume: float = 0.0
     end_date: datetime | None = None
+    platform: str = "polymarket"
 
     @property
     def url(self) -> str:
-        return f"https://polymarket.com/event/{self.event_slug}" if self.event_slug else ""
+        if not self.event_slug:
+            return ""
+        if self.platform == "kalshi":
+            return f"https://kalshi.com/events/{self.event_slug}"
+        return f"https://polymarket.com/event/{self.event_slug}"
 
     @property
     def yes_no_sum(self) -> float:
