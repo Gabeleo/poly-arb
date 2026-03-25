@@ -50,8 +50,7 @@ class Market:
 
     @property
     def url(self) -> str:
-        s = self.slug or self.event_slug
-        return f"https://polymarket.com/event/{s}" if s else ""
+        return f"https://polymarket.com/event/{self.event_slug}" if self.event_slug else ""
 
     @property
     def yes_no_sum(self) -> float:
