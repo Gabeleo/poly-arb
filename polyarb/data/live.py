@@ -116,11 +116,37 @@ class LiveDataProvider:
     def get_events(self) -> list[Event]:
         return group_events(self.get_active_markets())
 
-    def get_expiring_soon(self, within_days: int = 7) -> list[Market]:
-        markets = self.get_active_markets()
+    def search_markets(self, query: str, limit: int = 5) -> list[Market]:
+        """Search markets by name, sorted by 24h volume descending."""
+        fetch_limit = min(max(limit * 10, 100), 500)
+        data = self._fetch_json("/markets", {
+            "limit": str(fetch_limit),
+            "order": "volumeNum",
+            "ascending": "false",
+            "active": "true",
+            "closed": "false",
+        })
+        raw_list = data if isinstance(data, list) else [data]
+        markets = [m for raw in raw_list if (m := _parse_market(raw)) is not None]
+        q = query.lower()
+        markets = [m for m in markets if q in m.question.lower()]
+        return markets[:limit]
+
+    def get_expiring_within(self, hours: float, limit: int = 5) -> list[Market]:
+        """Fetch markets expiring within the given hours, soonest first."""
         now = datetime.now(timezone.utc)
-        cutoff = now + timedelta(days=within_days)
-        return [
-            m for m in markets
-            if m.end_date is not None and now < m.end_date <= cutoff
-        ]
+        cutoff = now + timedelta(hours=hours)
+        fetch_limit = min(max(limit * 10, 100), 500)
+        data = self._fetch_json("/markets", {
+            "limit": str(fetch_limit),
+            "order": "endDate",
+            "ascending": "true",
+            "active": "true",
+            "closed": "false",
+            "end_date_min": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "end_date_max": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+        raw_list = data if isinstance(data, list) else [data]
+        markets = [m for raw in raw_list if (m := _parse_market(raw)) is not None]
+        markets.sort(key=lambda m: m.end_date)
+        return markets[:limit]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import cmd
+import shlex
 import shutil
 from datetime import datetime, timezone
 
@@ -53,16 +54,89 @@ class PolyarbShell(cmd.Cmd):
     # ── Data ──────────────────────────────────────────────────
 
     def do_fetch(self, arg: str) -> None:
-        """Fetch top 10 markets by volume from Polymarket (or mock data)."""
+        """Fetch markets from Polymarket.\n\nRun 'fetch' with no arguments for usage."""
+        if not arg.strip():
+            self._print_fetch_usage()
+            return
+
+        try:
+            tokens = shlex.split(arg)
+        except ValueError as e:
+            print(f"{RED}Parse error: {e}{R}")
+            return
+
+        market_query = None
+        expiration_hours = None
+        pagination = 5
+
+        i = 0
+        while i < len(tokens):
+            flag = tokens[i]
+            if flag in ("--market", "-m") and i + 1 < len(tokens):
+                market_query = tokens[i + 1]
+                i += 2
+            elif flag in ("--expiration", "-e") and i + 1 < len(tokens):
+                try:
+                    expiration_hours = float(tokens[i + 1])
+                except ValueError:
+                    print(f"{RED}--expiration requires a number (hours){R}")
+                    return
+                i += 2
+            elif flag in ("--pagination", "-p") and i + 1 < len(tokens):
+                try:
+                    pagination = min(max(1, int(tokens[i + 1])), 500)
+                except ValueError:
+                    print(f"{RED}--pagination requires an integer (1-500){R}")
+                    return
+                i += 2
+            else:
+                print(f"{RED}Unknown option: {flag}{R}")
+                self._print_fetch_usage()
+                return
+
+        if market_query is None and expiration_hours is None:
+            print(f"{RED}Specify --market <name> or --expiration <hours>{R}")
+            self._print_fetch_usage()
+            return
+
         src = "Polymarket" if self.live else "mock provider"
         print(f"{DIM}Fetching from {src}...{R}")
+
         try:
-            self._markets = self.provider.get_active_markets()
+            if market_query is not None:
+                self._markets = self.provider.search_markets(market_query, limit=pagination)
+            else:
+                self._markets = self.provider.get_expiring_within(expiration_hours, limit=pagination)
         except Exception as e:
             print(f"{RED}Fetch failed: {e}{R}")
             return
-        print(f"{GREEN}Loaded {len(self._markets)} markets (by volume, increasing).{R}\n")
+
+        if not self._markets:
+            print(f"{YELLOW}No markets found.{R}")
+            return
+
+        print(f"{GREEN}Found {len(self._markets)} markets.{R}\n")
         self.do_markets("")
+
+    def _print_fetch_usage(self) -> None:
+        print(f"""
+{B}fetch{R} — Retrieve markets from Polymarket
+
+{B}Usage:{R}
+  fetch --market <name>              Search by name, top 5 by 24h volume
+  fetch --expiration <hours>         Markets expiring within <hours> hours
+
+{B}Options:{R}
+  --pagination, -p <N>               Result count (default: 5, max: 500)
+
+{B}Aliases:{R}  -m (--market)  -e (--expiration)  -p (--pagination)
+
+{B}Examples:{R}
+  fetch --market bitcoin
+  fetch -m election -p 20
+  fetch --expiration 48
+  fetch -e 24 -p 10
+""")
 
     # ── Views ─────────────────────────────────────────────────
 
@@ -77,7 +151,7 @@ class PolyarbShell(cmd.Cmd):
         qw = max(30, w - 58)
         print(f"\n{B}{'#':>4}  {'Volume':>14}  {'Expires':>8}  {'YES':>6} {'NO':>6}  {'Question':<{qw}}{R}")
         print("─" * min(w, 100))
-        for i, m in enumerate(self._markets[-n:], 1):
+        for i, m in enumerate(self._markets[:n], 1):
             vol = f"${m.volume:,.0f}"
             if m.end_date and m.end_date > now:
                 days = (m.end_date - now).total_seconds() / 86400

@@ -98,3 +98,10 @@ class MockDataProvider:
 
     def get_events(self) -> list[Event]:
         return group_events(self.get_active_markets())
+
+    def search_markets(self, query: str, limit: int = 5) -> list[Market]:
+        q = query.lower()
+        return [m for m in self.get_active_markets() if q in m.question.lower()][:limit]
+
+    def get_expiring_within(self, hours: float, limit: int = 5) -> list[Market]:
+        return []  # mock markets have no end dates
