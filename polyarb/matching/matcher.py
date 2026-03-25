@@ -1,0 +1,132 @@
+"""Cross-platform market matching.
+
+Scores how likely two markets (from different platforms) refer to the
+same real-world question, using token overlap, containment, and
+sequence similarity.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+
+from polyarb.matching.normalize import extract_years, normalize, tokenize
+from polyarb.models import Market
+
+
+@dataclass(frozen=True)
+class MatchedPair:
+    """A pair of markets from different platforms believed to represent
+    the same real-world question."""
+
+    poly_market: Market
+    kalshi_market: Market
+    confidence: float  # 0.0–1.0
+
+    @property
+    def yes_spread(self) -> float:
+        """YES price difference (positive = cheaper on Polymarket)."""
+        return round(
+            self.kalshi_market.yes_token.midpoint
+            - self.poly_market.yes_token.midpoint,
+            4,
+        )
+
+
+# ── Scoring internals ──────────────────────────────────────────
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def _containment(a: set[str], b: set[str]) -> float:
+    """Fraction of the *smaller* set found in the larger."""
+    if not a or not b:
+        return 0.0
+    smaller, larger = (a, b) if len(a) <= len(b) else (b, a)
+    return len(smaller & larger) / len(smaller)
+
+
+def _score_pair(
+    poly_tokens: set[str],
+    kalshi_tokens: set[str],
+    poly_norm: str,
+    kalshi_norm: str,
+    poly_years: set[str],
+    kalshi_years: set[str],
+) -> float:
+    """Score 0.0–1.0 whether two pre-tokenized markets match.
+
+    Three signals, weighted:
+      40 %  Jaccard token overlap
+      35 %  Containment (smaller set in larger)
+      25 %  SequenceMatcher ratio on normalized text
+    """
+    # Hard filter: if both mention years but none overlap → no match
+    if poly_years and kalshi_years and not (poly_years & kalshi_years):
+        return 0.0
+
+    jaccard = _jaccard(poly_tokens, kalshi_tokens)
+    containment = _containment(poly_tokens, kalshi_tokens)
+    seq = SequenceMatcher(None, poly_norm, kalshi_norm).ratio()
+
+    return round(0.40 * jaccard + 0.35 * containment + 0.25 * seq, 3)
+
+
+# ── Public API ──────────────────────────────────────────────────
+
+
+def find_matches(
+    poly_markets: list[Market],
+    kalshi_markets: list[Market],
+    min_confidence: float = 0.5,
+) -> list[MatchedPair]:
+    """Find cross-platform market pairs above *min_confidence*.
+
+    For each Polymarket market, picks the single best Kalshi match.
+    Returns results sorted by confidence (descending).
+    """
+    # Pre-compute tokens, norms, and years for every market
+    poly_data = [
+        (m, tokenize(m.question), normalize(m.question), extract_years(m.question))
+        for m in poly_markets
+    ]
+    kalshi_data = [
+        (m, tokenize(m.question), normalize(m.question), extract_years(m.question))
+        for m in kalshi_markets
+    ]
+
+    # Inverted index: token → list of kalshi indices that contain it.
+    # Lets us skip pairs that share zero tokens.
+    kalshi_index: dict[str, list[int]] = {}
+    for i, (_, tokens, _, _) in enumerate(kalshi_data):
+        for t in tokens:
+            kalshi_index.setdefault(t, []).append(i)
+
+    matches: list[MatchedPair] = []
+
+    for pm, p_tok, p_norm, p_years in poly_data:
+        # Only consider Kalshi markets sharing at least one token
+        candidate_ids: set[int] = set()
+        for t in p_tok:
+            for idx in kalshi_index.get(t, []):
+                candidate_ids.add(idx)
+
+        best_score = 0.0
+        best_km: Market | None = None
+
+        for idx in candidate_ids:
+            km, k_tok, k_norm, k_years = kalshi_data[idx]
+            score = _score_pair(p_tok, k_tok, p_norm, k_norm, p_years, k_years)
+            if score > best_score:
+                best_score = score
+                best_km = km
+
+        if best_km is not None and best_score >= min_confidence:
+            matches.append(MatchedPair(pm, best_km, best_score))
+
+    matches.sort(key=lambda m: m.confidence, reverse=True)
+    return matches

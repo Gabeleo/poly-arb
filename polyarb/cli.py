@@ -14,6 +14,7 @@ from polyarb.data.mock import MockDataProvider
 from polyarb.engine.multi import detect_multi
 from polyarb.engine.single import detect_single
 from polyarb.execution.executor import MockExecutor
+from polyarb.matching.matcher import MatchedPair, find_matches
 from polyarb.execution.orders import build_order_set
 from polyarb.models import Market, Opportunity, OrderSet
 
@@ -319,6 +320,72 @@ class PolyarbShell(cmd.Cmd):
             color = GREEN if os.expected_profit > 0 else RED
             print(f"{color}{i:>4}  {arb:<20}  ${os.expected_profit:>9.4f}  {mkt}{R}")
         print(f"\n{B}Total P&L: {GREEN}${self.executor.total_profit:,.4f}{R}\n")
+
+    # ── Cross-platform matching ────────────────────────────────
+
+    def do_cross(self, arg: str) -> None:
+        """Find cross-platform matches between Polymarket and Kalshi.
+
+        Usage: cross [min_confidence]   (default 0.5, range 0.0-1.0)
+        """
+        min_conf = float(arg) if arg.strip() else 0.5
+
+        print(f"{DIM}Fetching from Polymarket...{R}")
+        try:
+            poly_markets = LiveDataProvider(limit=100).get_active_markets()
+        except Exception as e:
+            print(f"{RED}Polymarket fetch failed: {e}{R}")
+            return
+
+        print(f"{DIM}Fetching from Kalshi...{R}")
+        try:
+            kalshi_markets = KalshiDataProvider(limit=200).get_active_markets()
+        except Exception as e:
+            print(f"{RED}Kalshi fetch failed: {e}{R}")
+            return
+
+        print(
+            f"{DIM}Matching {len(poly_markets)} × {len(kalshi_markets)} markets...{R}"
+        )
+        matches = find_matches(poly_markets, kalshi_markets, min_confidence=min_conf)
+
+        if not matches:
+            print(f"{YELLOW}No cross-platform matches above {min_conf:.0%} confidence.{R}")
+            return
+
+        self._cross_matches = matches
+        self._show_cross()
+
+    def _show_cross(self) -> None:
+        matches = self._cross_matches
+        w = _cols()
+        qw = max(20, (w - 45) // 2)
+        print(f"\n{B}{GREEN}{len(matches)} cross-platform matches:{R}\n")
+        print(
+            f"{B}{'#':>3}  {'Conf':>5}  {'Spread':>7}  "
+            f"{'Polymarket':<{qw}}  {'Kalshi':<{qw}}{R}"
+        )
+        print("─" * min(w, 120))
+
+        for i, pair in enumerate(matches, 1):
+            spread = pair.yes_spread
+            color = GREEN if abs(spread) >= 0.02 else ""
+            pm_q = _trunc(pair.poly_market.question, qw - 8)
+            km_q = _trunc(pair.kalshi_market.question, qw - 8)
+            pm_y = pair.poly_market.yes_token.midpoint
+            km_y = pair.kalshi_market.yes_token.midpoint
+            sign = "+" if spread > 0 else ""
+            print(
+                f"{color}{i:>3}  {pair.confidence:>5.0%}  "
+                f"{sign}{spread:>6.3f}  "
+                f"{pm_q} ({pm_y:.3f})  "
+                f"{km_q} ({km_y:.3f}){R}"
+            )
+
+        print(
+            f"\n  Spread = Kalshi YES − Poly YES "
+            f"(positive = cheaper on Polymarket)\n"
+        )
 
     # ── Config ────────────────────────────────────────────────
 
