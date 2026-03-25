@@ -50,7 +50,7 @@ class PolyarbShell(cmd.Cmd):
         self.live = live
 
         if live:
-            self.provider = LiveDataProvider(limit=100)
+            self.provider = LiveDataProvider(limit=10)
         else:
             self.provider = MockDataProvider(drift=True)
 
@@ -60,7 +60,7 @@ class PolyarbShell(cmd.Cmd):
     # ── Data ──────────────────────────────────────────────────
 
     def do_fetch(self, arg: str) -> None:
-        """Fetch top 100 markets by volume from Polymarket (or mock data)."""
+        """Fetch top 10 markets by volume from Polymarket (or mock data)."""
         src = "Polymarket" if self.live else "mock provider"
         print(f"{DIM}Fetching from {src}...{R}")
         try:
