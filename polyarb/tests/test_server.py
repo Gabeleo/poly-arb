@@ -39,9 +39,13 @@ def _opp(cid: str) -> Opportunity:
     )
 
 
+def _make_state() -> State:
+    return State(config=Config())
+
+
 def _make_client(state: State | None = None, kalshi_client=None) -> TestClient:
     if state is None:
-        state = State(config=Config())
+        state = _make_state()
     app = create_app(state, kalshi_client=kalshi_client)
     return TestClient(app)
 
@@ -170,6 +174,38 @@ def test_post_config_rejects_unknown_keys():
     assert resp.status_code == 400
 
 
+def test_post_config_rejects_negative_values():
+    state = _make_state()
+    app = create_app(state)
+    client = TestClient(app)
+    resp = client.post("/config", json={"scan_interval": -1.0})
+    assert resp.status_code == 400
+
+
+def test_post_config_rejects_zero_order_size():
+    client = _make_client()
+    resp = client.post("/config", json={"order_size": 0})
+    assert resp.status_code == 400
+
+
+def test_post_config_rejects_negative_min_profit():
+    client = _make_client()
+    resp = client.post("/config", json={"min_profit": -0.01})
+    assert resp.status_code == 400
+
+
+def test_post_config_allows_zero_min_profit():
+    client = _make_client()
+    resp = client.post("/config", json={"min_profit": 0.0})
+    assert resp.status_code == 200
+
+
+def test_post_config_rejects_zero_dedup_window():
+    client = _make_client()
+    resp = client.post("/config", json={"dedup_window": 0})
+    assert resp.status_code == 400
+
+
 # ── POST /execute/{id} ────────────────────────────────────
 
 
@@ -192,3 +228,42 @@ def test_execute_invalid_id():
     client = _make_client(state, kalshi_client=FakeKalshi())
     resp = client.post("/execute/99")
     assert resp.status_code == 404
+
+
+def test_execute_happy_path():
+    """POST /execute/1 with a valid match and fake kalshi_client returns 200."""
+
+    class FakeKalshiClient:
+        async def create_order(self, **kwargs):
+            return {"order_id": "ord_123", "status": "resting", "fill_count_fp": "0"}
+
+    state = State(config=Config())
+    state.matches = [_pair("p1", "k1")]
+    client = _make_client(state, kalshi_client=FakeKalshiClient())
+
+    resp = client.post("/execute/1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "order" in data
+    assert "match_id" in data
+    assert data["match_id"] == 1
+    assert data["order"]["order_id"] == "ord_123"
+    assert data["order"]["status"] == "resting"
+
+
+# ── WebSocket /ws ────────────────────────────────────────
+
+
+def test_ws_connect_and_disconnect():
+    """WS client is added to state.ws_clients on connect, removed on disconnect."""
+    state = State(config=Config())
+    client = _make_client(state)
+
+    assert len(state.ws_clients) == 0
+
+    with client.websocket_connect("/ws") as ws:
+        # After connect, the client should be tracked
+        assert len(state.ws_clients) == 1
+
+    # After disconnect, the client should be removed
+    assert len(state.ws_clients) == 0

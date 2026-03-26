@@ -54,29 +54,25 @@ def main() -> None:
         except Exception as exc:
             logger.warning("Kalshi execution unavailable: %s", exc)
 
-    app = create_app(state, kalshi_client=kalshi_client)
-
-    scan_task: asyncio.Task | None = None
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        nonlocal scan_task
-        scan_task = asyncio.create_task(run_scan_loop(state, poly, kalshi))
+    @asynccontextmanager
+    async def lifespan(app):
+        # startup
+        scan_task = asyncio.get_event_loop().create_task(run_scan_loop(state, poly, kalshi))
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        if scan_task is not None:
-            scan_task.cancel()
-            try:
-                await scan_task
-            except asyncio.CancelledError:
-                pass
+        yield
+        # shutdown
+        scan_task.cancel()
+        try:
+            await scan_task
+        except asyncio.CancelledError:
+            pass
         await poly.close()
         await kalshi.close()
         if kalshi_client is not None:
             await kalshi_client.close()
         logger.info("Daemon stopped")
+
+    app = create_app(state, kalshi_client=kalshi_client, lifespan=lifespan)
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 

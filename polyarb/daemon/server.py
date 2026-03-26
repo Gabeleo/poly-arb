@@ -14,7 +14,7 @@ from starlette.websockets import WebSocket
 from polyarb.daemon.state import State
 
 
-def create_app(state: State, kalshi_client: Any = None) -> Starlette:
+def create_app(state: State, kalshi_client: Any = None, lifespan: Any = None) -> Starlette:
     """Build and return a Starlette application wired to *state*."""
 
     async def status(request: Request) -> JSONResponse:
@@ -46,6 +46,20 @@ def create_app(state: State, kalshi_client: Any = None) -> Starlette:
                 return JSONResponse(
                     {"error": f"unknown config key: {key}"}, status_code=400
                 )
+
+        # Validate value constraints
+        _GT_ZERO = {"scan_interval", "order_size", "dedup_window"}
+        _GTE_ZERO = {"min_profit"}
+        for key, value in body.items():
+            if key in _GT_ZERO and value <= 0:
+                return JSONResponse(
+                    {"error": f"{key} must be > 0"}, status_code=400
+                )
+            if key in _GTE_ZERO and value < 0:
+                return JSONResponse(
+                    {"error": f"{key} must be >= 0"}, status_code=400
+                )
+
         for key, value in body.items():
             field_type = type(getattr(state.config, key))
             setattr(state.config, key, field_type(value))
@@ -101,4 +115,4 @@ def create_app(state: State, kalshi_client: Any = None) -> Starlette:
         WebSocketRoute("/ws", ws_endpoint),
     ]
 
-    return Starlette(routes=routes)
+    return Starlette(routes=routes, lifespan=lifespan)
