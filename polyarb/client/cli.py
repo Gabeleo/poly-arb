@@ -25,6 +25,7 @@ class ClientShell(cmd.Cmd):
         super().__init__()
         self.daemon_url = daemon_url
         self.client = DaemonClient(base_url=daemon_url)
+        self._scan_results: list[tuple[str, dict]] = []
 
         ws_url = daemon_url.replace("http://", "ws://").replace("https://", "wss://")
         ws_url = ws_url.rstrip("/") + "/ws"
@@ -44,7 +45,7 @@ class ClientShell(cmd.Cmd):
         if msg_type == "new_matches":
             count = len(data.get("data", []))
             print(f"\n{CYAN}[ws]{R} {GREEN}{count} new cross-platform match(es) detected{R}")
-            print(f"     Run {B}cross{R} to view.\n{self.prompt}", end="", flush=True)
+            print(f"     Run {B}scan{R} to view.\n{self.prompt}", end="", flush=True)
 
         elif msg_type == "new_opportunities":
             items = data.get("data", [])
@@ -58,7 +59,7 @@ class ClientShell(cmd.Cmd):
                     f"opportunity(ies){R}"
                 )
                 print(
-                    f"     Run {B}opp{R} to view.\n{self.prompt}",
+                    f"     Run {B}scan{R} to view.\n{self.prompt}",
                     end="",
                     flush=True,
                 )
@@ -79,56 +80,92 @@ class ClientShell(cmd.Cmd):
         print(f"  WS clients   : {data.get('connected_clients', 0)}")
         print()
 
-    def do_cross(self, arg: str) -> None:
-        """List cross-platform matches from the daemon."""
+    def do_scan(self, arg: str) -> None:
+        """Fetch all daemon findings (cross-platform matches + single-platform opps)."""
         matches = self.client.get_matches()
-        if matches is None:
+        opps = self.client.get_opportunities()
+
+        if matches is None or opps is None:
             print(f"{RED}Could not reach daemon.{R}")
             return
-        if not matches:
-            print(f"{YELLOW}No cross-platform matches found.{R}")
+
+        # Sort matches by best_arb profit descending
+        sorted_matches = sorted(
+            matches,
+            key=lambda m: m.get("best_arb", {}).get("profit", 0),
+            reverse=True,
+        )
+        # Sort opps by expected_profit_per_share descending
+        sorted_opps = sorted(
+            opps,
+            key=lambda o: o.get("expected_profit_per_share", 0),
+            reverse=True,
+        )
+
+        # Build combined list: matches first, then opps
+        self._scan_results = []
+        for m in sorted_matches:
+            self._scan_results.append(("match", m))
+        for o in sorted_opps:
+            self._scan_results.append(("opp", o))
+
+        if not self._scan_results:
+            print(f"{YELLOW}No matches or opportunities found.{R}")
             return
 
         w = _cols()
-        qw = max(15, (w - 60) // 2)
+        dw = max(20, w - 40)
 
-        print(f"\n{B}{GREEN}{len(matches)} cross-platform matches:{R}\n")
-        print(
-            f"{B}{'#':>3}  {'Conf':>5}  {'Arb':>8}  {'Kalshi leg':<14}  "
-            f"{'Polymarket':<{qw}}  {'Kalshi':<{qw}}{R}"
-        )
+        print(f"\n{B}{GREEN}{len(self._scan_results)} result(s):{R}\n")
+        print(f"{B}{'#':>3}  {'Type':<14}  {'Profit':>9}  {'Description':<{dw}}{R}")
         print("\u2500" * min(w, 120))
 
-        for i, m in enumerate(matches, 1):
-            best = m.get("best_arb", {})
-            profit = best.get("profit", 0)
-            kalshi_desc = best.get("kalshi_desc", "")
-            conf = m.get("confidence", 0)
-            color = GREEN if profit > 0 else ""
-            short_side = kalshi_desc.replace("BUY ", "").replace(" on Kalshi", "")
-            pm_q = _trunc(m.get("poly_market", {}).get("question", "?"), qw)
-            km_q = _trunc(m.get("kalshi_market", {}).get("question", "?"), qw)
+        for i, (kind, data) in enumerate(self._scan_results, 1):
+            if kind == "match":
+                best = data.get("best_arb", {})
+                profit = best.get("profit", 0)
+                type_label = "CROSS"
+                pm_q = data.get("poly_market", {}).get("question", "?")
+                km_q = data.get("kalshi_market", {}).get("question", "?")
+                desc = _trunc(f"{pm_q} \u2194 {km_q}", dw)
+            else:
+                profit = data.get("expected_profit_per_share", 0)
+                type_label = data.get("arb_type", "SINGLE").upper()
+                desc = _trunc(data.get("market", {}).get("question", "?"), dw)
+
+            if profit > 0:
+                color = GREEN
+            elif profit == 0:
+                color = YELLOW
+            else:
+                color = RED
             sign = "+" if profit > 0 else ""
             print(
-                f"{color}{i:>3}  {conf:>5.0%}  "
-                f"{sign}${profit:>6.4f}  {short_side:<14}  "
-                f"{pm_q}  {km_q}{R}"
+                f"{color}{i:>3}  {type_label:<14}  "
+                f"{sign}${profit:>7.4f}  {desc}{R}"
             )
 
-        print(f"\n  Use {B}opp <#>{R} for details, {B}execute <#>{R} to trade.\n")
+        print(f"\n  Use {B}detail <#>{R} for details, {B}execute <#>{R} to trade.\n")
 
-    def do_opp(self, arg: str) -> None:
-        """Show detail for a cross-platform match. Usage: opp <#>"""
+    def do_detail(self, arg: str) -> None:
+        """Show detail for a scan result. Usage: detail <#>"""
         idx = _parse_int(arg, 0)
         if idx < 1:
-            print(f"{YELLOW}Usage: opp <#>{R}")
+            print(f"{YELLOW}Usage: detail <#>{R}")
+            return
+        if not self._scan_results or idx > len(self._scan_results):
+            print(f"{YELLOW}No scan result #{idx}. Run {B}scan{R}{YELLOW} first.{R}")
             return
 
-        data = self.client.get_match(idx)
-        if data is None:
-            print(f"{YELLOW}Match #{idx} not found.{R}")
-            return
+        kind, data = self._scan_results[idx - 1]
 
+        if kind == "match":
+            self._detail_match(idx, data)
+        else:
+            self._detail_opp(idx, data)
+
+    def _detail_match(self, idx: int, data: dict) -> None:
+        """Render cross-platform match detail."""
         best = data.get("best_arb", {})
         profit = best.get("profit", 0)
         kalshi_desc = best.get("kalshi_desc", "")
@@ -157,19 +194,54 @@ class ClientShell(cmd.Cmd):
         print(f"    Profit/share: {color}${profit:.4f}{R}")
         print()
 
+    def _detail_opp(self, idx: int, data: dict) -> None:
+        """Render single-platform opportunity detail."""
+        profit = data.get("expected_profit_per_share", 0)
+        arb_type = data.get("arb_type", "SINGLE").upper()
+        color = GREEN if profit > 0 else YELLOW
+
+        print(f"\n{B}{color}Single-Platform Opportunity #{idx}{R}  (type: {arb_type})\n")
+
+        mkt = data.get("market", {})
+        print(f"  {B}Market:{R} {mkt.get('question', '?')}")
+
+        yes_price = mkt.get("yes_price", data.get("yes_price", 0))
+        no_price = mkt.get("no_price", data.get("no_price", 0))
+        print(f"    YES  price={yes_price:.4f}")
+        print(f"    NO   price={no_price:.4f}")
+
+        print(f"\n  {B}Arb type:{R}  {arb_type}")
+        print(f"  {B}Profit/share:{R} {color}${profit:.4f}{R}")
+        print()
+
     def do_execute(self, arg: str) -> None:
-        """Execute the Kalshi leg of a match. Usage: execute <#>"""
+        """Execute a trade from scan results. Usage: execute <#>"""
         idx = _parse_int(arg, 0)
         if idx < 1:
             print(f"{YELLOW}Usage: execute <#>{R}")
             return
+        if not self._scan_results or idx > len(self._scan_results):
+            print(f"{YELLOW}No scan result #{idx}. Run {B}scan{R}{YELLOW} first.{R}")
+            return
 
-        result = self.client.execute(idx)
+        kind, data = self._scan_results[idx - 1]
+
+        if kind == "opp":
+            print(f"{YELLOW}Single-platform execution is paper-trade only "
+                  f"(not yet supported via daemon).{R}")
+            return
+
+        # For matches: compute the 1-based index within just the matches
+        match_index = sum(
+            1 for k, _ in self._scan_results[:idx - 1] if k == "match"
+        ) + 1
+
+        result = self.client.execute(match_index)
         if "error" in result:
             print(f"{RED}Error: {result['error']}{R}")
         else:
             order = result.get("order", {})
-            mid = result.get("match_id", idx)
+            mid = result.get("match_id", match_index)
             status = order.get("status", "unknown")
             print(f"{GREEN}Order placed for match #{mid}: {status}{R}")
 
