@@ -1,6 +1,26 @@
 services:
   polyarb:
-    build: .
+    build:
+      context: .
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        PROXY_CA_CERT_B64: ${PROXY_CA_CERT_B64:-}
     stdin_open: true
     tty: true
-    command: ["--poly"]
+    network_mode: host
+    command: ["--kalshi"]
+    environment:
+      - KALSHI_API_KEY=${KALSHI_API_KEY:-}
+      - KALSHI_KEY_FILE=/run/secrets/kalshi_key
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - http_proxy=${http_proxy:-}
+      - https_proxy=${https_proxy:-}
+      - NO_PROXY=${NO_PROXY:-}
+      - no_proxy=${no_proxy:-}
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - ${KALSHI_KEY_FILE:-.docker-dummy-key}:/run/secrets/kalshi_key:ro
