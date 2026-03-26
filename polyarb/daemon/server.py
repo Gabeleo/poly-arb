@@ -14,7 +14,13 @@ from starlette.websockets import WebSocket
 from polyarb.daemon.state import State
 
 
-def create_app(state: State, kalshi_client: Any = None, lifespan: Any = None) -> Starlette:
+def create_app(
+    state: State,
+    kalshi_client: Any = None,
+    lifespan: Any = None,
+    approval_manager: Any = None,
+    telegram_bot: Any = None,
+) -> Starlette:
     """Build and return a Starlette application wired to *state*."""
 
     async def status(request: Request) -> JSONResponse:
@@ -93,6 +99,26 @@ def create_app(state: State, kalshi_client: Any = None, lifespan: Any = None) ->
         )
         return JSONResponse({"order": result, "match_id": idx})
 
+    async def telegram_webhook(request: Request) -> JSONResponse:
+        body = await request.json()
+        callback = body.get("callback_query")
+        if not callback or not approval_manager or not telegram_bot:
+            return JSONResponse({"ok": True})
+
+        data = callback.get("data", "")
+        callback_id = callback.get("id", "")
+
+        if data.startswith("approve:"):
+            approval_id = data.split(":", 1)[1]
+            await approval_manager.handle_approve(approval_id)
+            await telegram_bot.answer_callback(callback_id)
+        elif data.startswith("reject:"):
+            approval_id = data.split(":", 1)[1]
+            await approval_manager.handle_reject(approval_id)
+            await telegram_bot.answer_callback(callback_id)
+
+        return JSONResponse({"ok": True})
+
     async def ws_endpoint(websocket: WebSocket) -> None:
         await websocket.accept()
         state.ws_clients.add(websocket)
@@ -112,6 +138,7 @@ def create_app(state: State, kalshi_client: Any = None, lifespan: Any = None) ->
         Route("/config", get_config, methods=["GET"]),
         Route("/config", post_config, methods=["POST"]),
         Route("/execute/{id:int}", execute, methods=["POST"]),
+        Route("/telegram/webhook", telegram_webhook, methods=["POST"]),
         WebSocketRoute("/ws", ws_endpoint),
     ]
 

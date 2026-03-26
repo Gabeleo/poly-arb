@@ -54,11 +54,38 @@ def main() -> None:
         except Exception as exc:
             logger.warning("Kalshi execution unavailable: %s", exc)
 
+    # Optional Telegram notifications
+    telegram_bot = None
+    approval_manager = None
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if bot_token and chat_id:
+        from polyarb.notifications.telegram import TelegramBot
+        from polyarb.notifications.approval import ApprovalManager
+
+        telegram_bot = TelegramBot(token=bot_token, chat_id=chat_id)
+        approval_manager = ApprovalManager(
+            state=state, bot=telegram_bot,
+            kalshi_client=kalshi_client, config=config,
+        )
+        logger.info("Telegram notifications enabled (chat_id=%s)", chat_id)
+    else:
+        logger.info("Telegram not configured (set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)")
+
     @asynccontextmanager
     async def lifespan(app):
         # startup
-        scan_task = asyncio.get_event_loop().create_task(run_scan_loop(state, poly, kalshi))
+        scan_task = asyncio.get_event_loop().create_task(
+            run_scan_loop(state, poly, kalshi, approval_manager)
+        )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
+
+        if telegram_bot is not None:
+            webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
+            if webhook_url:
+                await telegram_bot.set_webhook(f"{webhook_url}/telegram/webhook")
+                logger.info("Telegram webhook registered: %s", webhook_url)
+
         yield
         # shutdown
         scan_task.cancel()
@@ -70,9 +97,17 @@ def main() -> None:
         await kalshi.close()
         if kalshi_client is not None:
             await kalshi_client.close()
+        if telegram_bot is not None:
+            await telegram_bot.close()
         logger.info("Daemon stopped")
 
-    app = create_app(state, kalshi_client=kalshi_client, lifespan=lifespan)
+    app = create_app(
+        state,
+        kalshi_client=kalshi_client,
+        lifespan=lifespan,
+        approval_manager=approval_manager,
+        telegram_bot=telegram_bot,
+    )
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 

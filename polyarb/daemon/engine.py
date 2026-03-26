@@ -14,7 +14,7 @@ from polyarb.matching.matcher import find_matches
 logger = logging.getLogger(__name__)
 
 
-async def run_scan_once(state: State, poly, kalshi) -> None:
+async def run_scan_once(state: State, poly, kalshi, approval_manager=None) -> None:
     """Fetch from both providers, detect matches and opportunities, update state."""
     # Concurrent fetch from both platforms
     poly_markets, kalshi_markets = await asyncio.gather(
@@ -50,12 +50,18 @@ async def run_scan_once(state: State, poly, kalshi) -> None:
             "data": [o.to_dict() for o in new_opps],
         })
 
+    # Approval manager hook (Telegram notifications)
+    if approval_manager:
+        await approval_manager.expire_stale()
+        if new_matches:
+            await approval_manager.on_new_matches(new_matches)
 
-async def run_scan_loop(state: State, poly, kalshi) -> None:
+
+async def run_scan_loop(state: State, poly, kalshi, approval_manager=None) -> None:
     """Continuous scan loop; catches exceptions to stay alive."""
     while True:
         try:
-            await run_scan_once(state, poly, kalshi)
+            await run_scan_once(state, poly, kalshi, approval_manager)
         except asyncio.CancelledError:
             raise
         except Exception:
