@@ -20,4 +20,6 @@ COPY polyarb/ polyarb/
 
 RUN pip install --no-cache-dir -e ".[dev,trade]"
 
+EXPOSE 8080
+
 ENTRYPOINT ["python", "-m", "polyarb"]

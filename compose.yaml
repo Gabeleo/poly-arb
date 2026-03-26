@@ -1,5 +1,5 @@
 services:
-  polyarb:
+  daemon:
     build:
       context: .
       args:
@@ -7,20 +7,28 @@ services:
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
         PROXY_CA_CERT_B64: ${PROXY_CA_CERT_B64:-}
-    stdin_open: true
-    tty: true
-    network_mode: host
-    command: ["--kalshi"]
+    ports:
+      - "8080:8080"
+    command: ["--daemon", "--host", "0.0.0.0"]
     environment:
       - KALSHI_API_KEY=${KALSHI_API_KEY:-}
       - KALSHI_KEY_FILE=/run/secrets/kalshi_key
+      - KALSHI_ENV=${KALSHI_ENV:-demo}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - http_proxy=${http_proxy:-}
       - https_proxy=${https_proxy:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${no_proxy:-}
-      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
     volumes:
       - ${KALSHI_KEY_FILE:-.docker-dummy-key}:/run/secrets/kalshi_key:ro
+
+  client:
+    build:
+      context: .
+    stdin_open: true
+    tty: true
+    network_mode: "service:daemon"
+    command: ["--url", "http://127.0.0.1:8080"]
+    depends_on:
+      - daemon
