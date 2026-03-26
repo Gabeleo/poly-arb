@@ -101,8 +101,24 @@ def create_app(
 
     async def telegram_webhook(request: Request) -> JSONResponse:
         body = await request.json()
+
+        if not telegram_bot:
+            return JSONResponse({"ok": True})
+
+        # Handle /scan command
+        message = body.get("message", {})
+        text = (message.get("text") or "").strip()
+        if text == "/scan":
+            try:
+                await telegram_bot.send_digest(state.opportunities)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("Failed to send /scan digest")
+            return JSONResponse({"ok": True})
+
+        # Handle button callbacks
         callback = body.get("callback_query")
-        if not callback or not approval_manager or not telegram_bot:
+        if not callback or not approval_manager:
             return JSONResponse({"ok": True})
 
         data = callback.get("data", "")
