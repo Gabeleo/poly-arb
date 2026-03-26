@@ -35,6 +35,15 @@ class Token:
     def display_price(self) -> str:
         return f"{self.midpoint:.3f}"
 
+    def to_dict(self) -> dict:
+        return {
+            "token_id": self.token_id,
+            "side": self.side.value,
+            "midpoint": self.midpoint,
+            "best_bid": self.best_bid,
+            "best_ask": self.best_ask,
+        }
+
 
 @dataclass(frozen=True)
 class Market:
@@ -65,6 +74,20 @@ class Market:
     def spread(self) -> float:
         return abs(self.yes_no_sum - 1.0)
 
+    def to_dict(self) -> dict:
+        return {
+            "condition_id": self.condition_id,
+            "question": self.question,
+            "yes_token": self.yes_token.to_dict(),
+            "no_token": self.no_token.to_dict(),
+            "neg_risk": self.neg_risk,
+            "event_slug": self.event_slug,
+            "slug": self.slug,
+            "volume": self.volume,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "platform": self.platform,
+        }
+
 
 @dataclass(frozen=True)
 class Event:
@@ -75,6 +98,13 @@ class Event:
     @property
     def yes_sum(self) -> float:
         return sum(m.yes_token.midpoint for m in self.markets)
+
+    def to_dict(self) -> dict:
+        return {
+            "slug": self.slug,
+            "title": self.title,
+            "markets": [m.to_dict() for m in self.markets],
+        }
 
 
 @dataclass(frozen=True)
@@ -88,6 +118,15 @@ class Opportunity:
     def key(self) -> str:
         ids = sorted(m.condition_id for m in self.markets)
         return sha256(f"{self.arb_type.value}:{'|'.join(ids)}".encode()).hexdigest()[:12]
+
+    def to_dict(self) -> dict:
+        return {
+            "arb_type": self.arb_type.value,
+            "markets": [m.to_dict() for m in self.markets],
+            "event": self.event.to_dict() if self.event else None,
+            "expected_profit_per_share": self.expected_profit_per_share,
+            "key": self.key,
+        }
 
     def summary(self) -> str:
         if self.arb_type in (ArbType.SINGLE_UNDERPRICE, ArbType.SINGLE_OVERPRICE):
@@ -118,6 +157,15 @@ class Order:
     price: float
     size: float
 
+    def to_dict(self) -> dict:
+        return {
+            "token_id": self.token_id,
+            "side": self.side.value,
+            "action": self.action.value,
+            "price": self.price,
+            "size": self.size,
+        }
+
     def describe(self) -> str:
         return f"{self.action.value} {self.size:.0f}x {self.side.value} @ {self.price:.3f}"
 
@@ -132,6 +180,15 @@ class OrderSet:
     @property
     def expected_profit(self) -> float:
         return self.expected_payout - self.total_cost
+
+    def to_dict(self) -> dict:
+        return {
+            "opportunity": self.opportunity.to_dict(),
+            "orders": [o.to_dict() for o in self.orders],
+            "total_cost": self.total_cost,
+            "expected_payout": self.expected_payout,
+            "expected_profit": self.expected_profit,
+        }
 
     def describe(self) -> str:
         lines = [f"OrderSet ({self.opportunity.arb_type.value}):"]

@@ -73,6 +73,24 @@ class MatchedPair:
             self.kalshi_market.no_token.best_ask,
         )
 
+    def to_dict(self) -> dict:
+        profit, kalshi_side, kalshi_desc, poly_desc, kalshi_price = self.best_arb
+        return {
+            "poly_market": self.poly_market.to_dict(),
+            "kalshi_market": self.kalshi_market.to_dict(),
+            "confidence": self.confidence,
+            "yes_spread": self.yes_spread,
+            "profit_buy_kalshi_yes": self.profit_buy_kalshi_yes,
+            "profit_buy_poly_yes": self.profit_buy_poly_yes,
+            "best_arb": {
+                "profit": profit,
+                "kalshi_side": kalshi_side,
+                "kalshi_desc": kalshi_desc,
+                "poly_desc": poly_desc,
+                "kalshi_price": kalshi_price,
+            },
+        }
+
 
 # ── Scoring internals ──────────────────────────────────────────
 
