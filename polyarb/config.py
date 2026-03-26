@@ -8,3 +8,4 @@ class Config:
     scan_interval: float = 10.0
     order_size: float = 10.0
     dedup_window: int = 60
+    approval_timeout: float = 120.0
