@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from polyarb.matching.matcher import MatchedPair
-from polyarb.models import Market, Side, Token
+from polyarb.models import ArbType, Market, Opportunity, Side, Token
 from polyarb.notifications.telegram import TelegramBot
 
 
@@ -173,3 +173,62 @@ async def test_set_webhook():
     assert rec.last_path().endswith("/setWebhook")
     payload = rec.last_json()
     assert payload["url"] == "https://example.com/hook"
+
+
+@pytest.mark.asyncio
+async def test_send_digest():
+    rec = _Recorder()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(rec.handler))
+    bot = TelegramBot(token="tok123", chat_id="999", client=client)
+
+    def _mkt(cid):
+        return Market(
+            condition_id=cid,
+            question=f"Will {cid} happen?",
+            yes_token=Token(
+                token_id=f"{cid}:y", side=Side.YES, midpoint=0.6,
+                best_bid=0.59, best_ask=0.61,
+            ),
+            no_token=Token(
+                token_id=f"{cid}:n", side=Side.NO, midpoint=0.4,
+                best_bid=0.39, best_ask=0.41,
+            ),
+        )
+
+    opps = [
+        Opportunity(
+            arb_type=ArbType.SINGLE_UNDERPRICE,
+            markets=(_mkt("a"),),
+            expected_profit_per_share=0.03,
+        ),
+        Opportunity(
+            arb_type=ArbType.SINGLE_UNDERPRICE,
+            markets=(_mkt("b"),),
+            expected_profit_per_share=0.01,
+        ),
+    ]
+
+    msg_id = await bot.send_digest(opps, limit=20)
+
+    assert msg_id == 42
+    assert len(rec.requests) == 1
+    body = json.loads(rec.requests[0].content)
+    text = body["text"]
+    assert "Digest" in text
+    assert "Will a happen?" in text
+    # Verify sorted by profit (a=0.03 before b=0.01)
+    assert text.index("Will a happen?") < text.index("Will b happen?")
+    await bot.close()
+
+
+@pytest.mark.asyncio
+async def test_send_digest_empty():
+    rec = _Recorder()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(rec.handler))
+    bot = TelegramBot(token="tok123", chat_id="999", client=client)
+
+    msg_id = await bot.send_digest([], limit=20)
+
+    assert msg_id == 0
+    assert len(rec.requests) == 0
+    await bot.close()

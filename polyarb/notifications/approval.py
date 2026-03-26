@@ -116,13 +116,18 @@ class ApprovalManager:
         _, kalshi_side, _, _, kalshi_price = current_match.best_arb
         price_cents = int(round(kalshi_price * 100))
 
-        result = await self._kalshi_client.create_order(
-            ticker=current_match.kalshi_market.condition_id,
-            side=kalshi_side,
-            action="buy",
-            price_cents=price_cents,
-            count=int(self._config.order_size),
-        )
+        try:
+            result = await self._kalshi_client.create_order(
+                ticker=current_match.kalshi_market.condition_id,
+                side=kalshi_side,
+                action="buy",
+                price_cents=price_cents,
+                count=int(self._config.order_size),
+            )
+        except Exception as e:
+            msg = f"Execution failed: {e}"
+            await self._bot.edit_result(pending.telegram_message_id, msg)
+            return msg
 
         order_id = result.get("order_id", "unknown")
         status = result.get("status", "unknown")
@@ -151,3 +156,10 @@ class ApprovalManager:
         for aid in expired_ids:
             pending = self._pending.pop(aid)
             await self._bot.edit_expired(pending.telegram_message_id)
+
+        # Prune _alerted for matches no longer present
+        current_keys = {
+            f"{m.poly_market.condition_id}:{m.kalshi_market.condition_id}"
+            for m in self._state.matches
+        }
+        self._alerted = {k: v for k, v in self._alerted.items() if k in current_keys}

@@ -54,7 +54,7 @@ def create_app(
                 )
 
         # Validate value constraints
-        _GT_ZERO = {"scan_interval", "order_size", "dedup_window"}
+        _GT_ZERO = {"scan_interval", "order_size", "dedup_window", "approval_timeout", "digest_interval"}
         _GTE_ZERO = {"min_profit"}
         for key, value in body.items():
             if key in _GT_ZERO and value <= 0:
@@ -108,14 +108,22 @@ def create_app(
         data = callback.get("data", "")
         callback_id = callback.get("id", "")
 
-        if data.startswith("approve:"):
-            approval_id = data.split(":", 1)[1]
-            await approval_manager.handle_approve(approval_id)
-            await telegram_bot.answer_callback(callback_id)
-        elif data.startswith("reject:"):
-            approval_id = data.split(":", 1)[1]
-            await approval_manager.handle_reject(approval_id)
-            await telegram_bot.answer_callback(callback_id)
+        try:
+            if data.startswith("approve:"):
+                approval_id = data.split(":", 1)[1]
+                await approval_manager.handle_approve(approval_id)
+            elif data.startswith("reject:"):
+                approval_id = data.split(":", 1)[1]
+                await approval_manager.handle_reject(approval_id)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Webhook handler error")
+        finally:
+            if callback_id:
+                try:
+                    await telegram_bot.answer_callback(callback_id)
+                except Exception:
+                    pass
 
         return JSONResponse({"ok": True})
 
