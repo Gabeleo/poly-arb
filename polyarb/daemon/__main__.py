@@ -76,7 +76,7 @@ def main() -> None:
     async def lifespan(app):
         # startup
         scan_task = asyncio.get_event_loop().create_task(
-            run_scan_loop(state, poly, kalshi, approval_manager)
+            run_scan_loop(state, poly, kalshi, approval_manager, telegram_bot)
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
 

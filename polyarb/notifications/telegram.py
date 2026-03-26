@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from polyarb.matching.matcher import MatchedPair
+from polyarb.models import Opportunity
 
 
 def _format_alert(match: MatchedPair) -> str:
@@ -128,6 +129,27 @@ class TelegramBot:
             "answerCallbackQuery",
             {"callback_query_id": callback_query_id},
         )
+
+    async def send_digest(self, opps: list[Opportunity], limit: int = 20) -> int:
+        """Send a digest of top single-platform opportunities. Returns message_id."""
+        top = sorted(opps, key=lambda o: o.expected_profit_per_share, reverse=True)[:limit]
+        if not top:
+            return 0
+
+        lines = [f"\U0001f4ca Hourly Arb Digest — Top {len(top)} Single-Platform\n"]
+        for i, opp in enumerate(top, 1):
+            arb_label = opp.arb_type.value.replace("_", " ").title()
+            q = opp.markets[0].question if opp.markets else "?"
+            if len(q) > 40:
+                q = q[:39] + "\u2026"
+            lines.append(f"{i}. [{arb_label}] ${opp.expected_profit_per_share:.4f}  {q}")
+
+        text = "\n".join(lines)
+        result = await self._post("sendMessage", {
+            "chat_id": self._chat_id,
+            "text": text,
+        })
+        return result.get("result", {}).get("message_id", 0)
 
     async def set_webhook(self, url: str) -> None:
         """Register a webhook URL with the Telegram Bot API."""

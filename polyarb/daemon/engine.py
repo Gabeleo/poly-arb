@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from polyarb.daemon.state import State
 from polyarb.data.base import group_events
@@ -57,11 +58,26 @@ async def run_scan_once(state: State, poly, kalshi, approval_manager=None) -> No
             await approval_manager.on_new_matches(new_matches)
 
 
-async def run_scan_loop(state: State, poly, kalshi, approval_manager=None) -> None:
+async def run_scan_loop(
+    state: State, poly, kalshi, approval_manager=None, telegram_bot=None,
+) -> None:
     """Continuous scan loop; catches exceptions to stay alive."""
+    last_digest = time.monotonic()
     while True:
         try:
             await run_scan_once(state, poly, kalshi, approval_manager)
+
+            # Hourly digest of top single-platform opps
+            if telegram_bot and state.opportunities:
+                now = time.monotonic()
+                if now - last_digest >= state.config.digest_interval:
+                    try:
+                        await telegram_bot.send_digest(state.opportunities)
+                        last_digest = now
+                        logger.info("Digest sent (%d opps)", len(state.opportunities))
+                    except Exception:
+                        logger.exception("Failed to send digest")
+
         except asyncio.CancelledError:
             raise
         except Exception:
