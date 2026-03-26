@@ -60,6 +60,7 @@ class PolyarbShell(cmd.Cmd):
         self._markets: list[Market] = []
         self._opps: list[tuple[Opportunity, OrderSet]] = []
         self._cross_matches: list[MatchedPair] = []
+        self._last_cmd: str = ""  # "scan" or "cross" — controls opp/execute
 
     # ── Data ──────────────────────────────────────────────────
 
@@ -233,7 +234,7 @@ class PolyarbShell(cmd.Cmd):
     # ── Arb Detection ─────────────────────────────────────────
 
     def do_scan(self, arg: str) -> None:
-        """Scan loaded markets for arbitrage opportunities."""
+        """Scan loaded markets for single-platform arb. See 'cross' for cross-platform."""
         if not self._markets:
             print(f"{YELLOW}No markets loaded. Run {B}fetch{R}{YELLOW} first.{R}")
             return
@@ -243,7 +244,7 @@ class PolyarbShell(cmd.Cmd):
         all_opps = single + multi
 
         if not all_opps:
-            print(f"{YELLOW}No arbitrage opportunities found.{R}")
+            print(f"{YELLOW}No single-platform arb found. Try {B}cross{R}{YELLOW} for cross-platform.{R}")
             self._opps = []
             return
 
@@ -253,10 +254,11 @@ class PolyarbShell(cmd.Cmd):
             self._opps.append((opp, os))
 
         self._opps.sort(key=lambda x: x[1].expected_profit, reverse=True)
+        self._last_cmd = "scan"
         self._show_opps()
 
     def _show_opps(self) -> None:
-        print(f"\n{B}{GREEN}{len(self._opps)} arbitrage opportunities found:{R}\n")
+        print(f"\n{B}{GREEN}{len(self._opps)} single-platform opportunities:{R}\n")
         w = _cols()
         qw = max(20, w - 65)
         print(f"{B}{'#':>4}  {'Type':<20}  {'Profit':>10}  {'Cost':>10}  {'Market':<{qw}}{R}")
@@ -270,26 +272,62 @@ class PolyarbShell(cmd.Cmd):
                 f"{color}{i:>4}  {arb_label:<20}  "
                 f"${os.expected_profit:>9.4f}  ${os.total_cost:>9.4f}  {mkt}{R}"
             )
-        print(f"\n  Use {B}opp <#>{R} for details, {B}execute <#>{R} to paper trade.\n")
+        print(f"\n  Use {B}opp <#>{R} for details, {B}execute <#>{R} to trade.\n")
 
     def do_opp(self, arg: str) -> None:
-        """Show details of an arbitrage opportunity. Usage: opp <#>"""
-        if not self._opps:
-            print(f"{YELLOW}No opportunities. Run {B}scan{R}{YELLOW} first.{R}")
-            return
+        """Show details for an opportunity. Works after 'scan' or 'cross'."""
         idx = _parse_int(arg, 0)
-        if idx < 1 or idx > len(self._opps):
-            print(f"{YELLOW}Usage: opp <#> (1-{len(self._opps)}){R}")
-            return
-        opp, os = self._opps[idx - 1]
-        color = GREEN if "UNDER" in opp.arb_type.value else RED
-        print(f"\n{B}{color}Opportunity #{idx}{R}")
-        print(f"  {opp.summary()}\n")
-        print(f"  {B}Markets:{R}")
-        for m in opp.markets:
-            label = _link(m.url, m.question) if m.url else m.question
-            print(f"    {CYAN}{label}{R}")
-        print(f"\n  {CYAN}{os.describe()}{R}\n")
+
+        if self._last_cmd == "cross" and self._cross_matches:
+            if idx < 1 or idx > len(self._cross_matches):
+                print(f"{YELLOW}Usage: opp <#> (1-{len(self._cross_matches)}){R}")
+                return
+            self._show_cross_detail(idx - 1)
+
+        elif self._last_cmd == "scan" and self._opps:
+            if idx < 1 or idx > len(self._opps):
+                print(f"{YELLOW}Usage: opp <#> (1-{len(self._opps)}){R}")
+                return
+            opp, os = self._opps[idx - 1]
+            color = GREEN if "UNDER" in opp.arb_type.value else RED
+            print(f"\n{B}{color}Opportunity #{idx}{R}")
+            print(f"  {opp.summary()}\n")
+            print(f"  {B}Markets:{R}")
+            for m in opp.markets:
+                label = _link(m.url, m.question) if m.url else m.question
+                print(f"    {CYAN}{label}{R}")
+            print(f"\n  {CYAN}{os.describe()}{R}\n")
+
+        else:
+            print(f"{YELLOW}Run {B}cross{R}{YELLOW} or {B}scan{R}{YELLOW} first.{R}")
+
+    def _show_cross_detail(self, idx: int) -> None:
+        pair = self._cross_matches[idx]
+        pm, km = pair.poly_market, pair.kalshi_market
+        profit, kalshi_side, kalshi_desc, poly_desc, kalshi_price = pair.best_arb
+        color = GREEN if profit > 0 else YELLOW
+
+        print(f"\n{B}{color}Cross-Platform Match #{idx + 1}{R}  ({pair.confidence:.0%} confidence)\n")
+
+        pm_link = _link(pm.url, pm.question) if pm.url else pm.question
+        print(f"  {B}Polymarket:{R} {pm_link}")
+        print(f"    YES  mid={pm.yes_token.midpoint:.4f}  bid={pm.yes_token.best_bid:.4f}  ask={pm.yes_token.best_ask:.4f}")
+        print(f"    NO   mid={pm.no_token.midpoint:.4f}  bid={pm.no_token.best_bid:.4f}  ask={pm.no_token.best_ask:.4f}")
+
+        km_link = _link(km.url, km.question) if km.url else km.question
+        print(f"\n  {B}Kalshi:{R} {km_link}")
+        print(f"    YES  mid={km.yes_token.midpoint:.4f}  bid={km.yes_token.best_bid:.4f}  ask={km.yes_token.best_ask:.4f}")
+        print(f"    NO   mid={km.no_token.midpoint:.4f}  bid={km.no_token.best_bid:.4f}  ask={km.no_token.best_ask:.4f}")
+
+        size = self.config.order_size
+        print(f"\n  {B}Arb (at ask prices):{R}")
+        print(f"    {kalshi_desc}  +  {poly_desc}")
+        print(f"    Profit/share: {color}${profit:.4f}{R}")
+        if profit > 0:
+            print(f"    {size:.0f} shares: cost ${(1.0 - profit) * size:.2f} → payout ${size:.2f} → {GREEN}profit ${profit * size:.2f}{R}")
+        print(f"\n  {B}Kalshi order:{R} BUY {size:.0f}x {kalshi_side.upper()} @ ${kalshi_price:.3f}")
+        print(f"  {B}Polymarket:{R}  {'BUY NO' if kalshi_side == 'yes' else 'BUY YES'} manually")
+        print()
 
     # ── Execution ─────────────────────────────────────────────
 
@@ -385,16 +423,70 @@ class PolyarbShell(cmd.Cmd):
             print(f"{RED}Failed: {e}{R}")
 
     def do_execute(self, arg: str) -> None:
-        """Execute an opportunity. Paper-trade unless connected via 'connect'."""
-        if not self._opps:
-            print(f"{YELLOW}No opportunities. Run {B}scan{R}{YELLOW} first.{R}")
-            return
+        """Execute an opportunity. Works after 'scan' or 'cross'."""
         idx = _parse_int(arg, 0)
-        if idx < 1 or idx > len(self._opps):
-            print(f"{YELLOW}Usage: execute <#> (1-{len(self._opps)}){R}")
-            return
-        _, os = self._opps[idx - 1]
-        self.executor.execute(os)
+
+        if self._last_cmd == "cross" and self._cross_matches:
+            if idx < 1 or idx > len(self._cross_matches):
+                print(f"{YELLOW}Usage: execute <#> (1-{len(self._cross_matches)}){R}")
+                return
+            self._execute_cross(idx - 1)
+
+        elif self._last_cmd == "scan" and self._opps:
+            if idx < 1 or idx > len(self._opps):
+                print(f"{YELLOW}Usage: execute <#> (1-{len(self._opps)}){R}")
+                return
+            _, os = self._opps[idx - 1]
+            self.executor.execute(os)
+
+        else:
+            print(f"{YELLOW}Run {B}cross{R}{YELLOW} or {B}scan{R}{YELLOW} first.{R}")
+
+    def _execute_cross(self, idx: int) -> None:
+        """Place the Kalshi leg of a cross-platform arb."""
+        pair = self._cross_matches[idx]
+        profit, kalshi_side, kalshi_desc, poly_desc, kalshi_price = pair.best_arb
+        km = pair.kalshi_market
+        ticker = km.condition_id
+        size = max(1, int(self.config.order_size))
+
+        print(f"\n  {B}Cross-platform arb #{idx + 1}:{R}")
+        print(f"    {kalshi_desc}  +  {poly_desc}")
+        print(f"    Profit/share: ${profit:.4f}")
+
+        # Place Kalshi leg via executor
+        try:
+            from polyarb.execution.kalshi import KalshiExecutor
+        except ImportError:
+            KalshiExecutor = None
+
+        if KalshiExecutor and isinstance(self.executor, KalshiExecutor):
+            price_cents = max(1, min(99, round(kalshi_price * 100)))
+            env = "DEMO" if self.executor.client.demo else "PRODUCTION"
+            print(f"\n  Placing on Kalshi ({env})...")
+            try:
+                result = self.executor.client.create_order(
+                    ticker=ticker,
+                    side=kalshi_side,
+                    action="buy",
+                    price_cents=price_cents,
+                    count=size,
+                )
+                status = result.get("status", "unknown")
+                filled = result.get("fill_count_fp", "0")
+                print(
+                    f"    BUY {size}x {kalshi_side.upper()} {ticker} "
+                    f"@ ${kalshi_price:.3f} -> {status} (filled={filled})"
+                )
+                print(f"\n  {GREEN}Kalshi leg placed.{R}")
+            except Exception as e:
+                print(f"    {RED}Order failed: {e}{R}")
+                return
+        else:
+            print(f"\n  {YELLOW}Not connected to Kalshi. Showing order details only.{R}")
+            print(f"    Kalshi: BUY {size}x {kalshi_side.upper()} {ticker} @ ${kalshi_price:.3f}")
+
+        print(f"  {CYAN}Polymarket: {'BUY NO' if kalshi_side == 'yes' else 'BUY YES'} manually{R}\n")
 
     def do_portfolio(self, arg: str) -> None:
         """Show trading portfolio and P&L."""
@@ -450,39 +542,39 @@ class PolyarbShell(cmd.Cmd):
             print(f"{YELLOW}No cross-platform matches above {min_conf:.0%} confidence.{R}")
             return
 
+        # Sort by arb profit (best first)
+        matches.sort(key=lambda p: p.best_arb[0], reverse=True)
         self._cross_matches = matches
+        self._last_cmd = "cross"
         self._show_cross()
 
     def _show_cross(self) -> None:
         matches = self._cross_matches
+        arb_count = sum(1 for p in matches if p.best_arb[0] > 0)
         w = _cols()
-        qw = max(20, (w - 45) // 2)
-        print(f"\n{B}{GREEN}{len(matches)} cross-platform matches:{R}\n")
+        qw = max(15, (w - 60) // 2)
+
+        print(f"\n{B}{GREEN}{len(matches)} matches, {arb_count} with positive arb:{R}\n")
         print(
-            f"{B}{'#':>3}  {'Conf':>5}  {'Spread':>7}  "
+            f"{B}{'#':>3}  {'Conf':>5}  {'Arb':>8}  {'Kalshi leg':<14}  "
             f"{'Polymarket':<{qw}}  {'Kalshi':<{qw}}{R}"
         )
         print("─" * min(w, 120))
 
         for i, pair in enumerate(matches, 1):
-            spread = pair.yes_spread
-            color = GREEN if abs(spread) >= 0.02 else ""
-            pm_q = _trunc(pair.poly_market.question, qw - 8)
-            km_q = _trunc(pair.kalshi_market.question, qw - 8)
-            pm_y = pair.poly_market.yes_token.midpoint
-            km_y = pair.kalshi_market.yes_token.midpoint
-            sign = "+" if spread > 0 else ""
+            profit, _, kalshi_desc, _, _ = pair.best_arb
+            color = GREEN if profit > 0 else ""
+            short_side = kalshi_desc.replace("BUY ", "").replace(" on Kalshi", "")
+            pm_q = _trunc(pair.poly_market.question, qw)
+            km_q = _trunc(pair.kalshi_market.question, qw)
+            sign = "+" if profit > 0 else ""
             print(
                 f"{color}{i:>3}  {pair.confidence:>5.0%}  "
-                f"{sign}{spread:>6.3f}  "
-                f"{pm_q} ({pm_y:.3f})  "
-                f"{km_q} ({km_y:.3f}){R}"
+                f"{sign}${profit:>6.4f}  {short_side:<14}  "
+                f"{pm_q}  {km_q}{R}"
             )
 
-        print(
-            f"\n  Spread = Kalshi YES − Poly YES "
-            f"(positive = cheaper on Polymarket)\n"
-        )
+        print(f"\n  Use {B}opp <#>{R} for details, {B}execute <#>{R} to trade Kalshi leg.\n")
 
     # ── Config ────────────────────────────────────────────────
 

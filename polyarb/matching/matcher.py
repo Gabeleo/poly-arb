@@ -25,11 +25,52 @@ class MatchedPair:
 
     @property
     def yes_spread(self) -> float:
-        """YES price difference (positive = cheaper on Polymarket)."""
+        """YES midpoint difference (indicator only, not executable)."""
         return round(
             self.kalshi_market.yes_token.midpoint
             - self.poly_market.yes_token.midpoint,
             4,
+        )
+
+    # ── Arb profit at executable (ask) prices ───────────
+
+    @property
+    def profit_buy_kalshi_yes(self) -> float:
+        """Profit/share: BUY YES on Kalshi + BUY NO on Polymarket.
+
+        Both pay $1.00 in complementary outcomes, guaranteeing $1 payout.
+        """
+        cost = self.kalshi_market.yes_token.best_ask + self.poly_market.no_token.best_ask
+        return round(1.0 - cost, 4)
+
+    @property
+    def profit_buy_poly_yes(self) -> float:
+        """Profit/share: BUY YES on Polymarket + BUY NO on Kalshi."""
+        cost = self.poly_market.yes_token.best_ask + self.kalshi_market.no_token.best_ask
+        return round(1.0 - cost, 4)
+
+    @property
+    def best_arb(self) -> tuple[float, str, str, str, float]:
+        """(profit, kalshi_side, kalshi_action_desc, poly_action_desc, kalshi_price).
+
+        Returns the most profitable direction, or the least negative.
+        """
+        p1 = self.profit_buy_kalshi_yes
+        p2 = self.profit_buy_poly_yes
+        if p1 >= p2:
+            return (
+                p1,
+                "yes",
+                "BUY YES on Kalshi",
+                "BUY NO on Polymarket",
+                self.kalshi_market.yes_token.best_ask,
+            )
+        return (
+            p2,
+            "no",
+            "BUY NO on Kalshi",
+            "BUY YES on Polymarket",
+            self.kalshi_market.no_token.best_ask,
         )
 
 

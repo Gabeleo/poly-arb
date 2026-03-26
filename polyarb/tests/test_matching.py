@@ -9,11 +9,12 @@ from polyarb.models import Market, Side, Token
 
 
 def _mkt(question: str, yes_mid: float = 0.50, platform: str = "polymarket") -> Market:
+    no_mid = round(1 - yes_mid, 4)
     return Market(
         condition_id=f"test-{hash(question) % 10000}",
         question=question,
         yes_token=Token("y", Side.YES, yes_mid, yes_mid - 0.01, yes_mid + 0.01),
-        no_token=Token("n", Side.NO, round(1 - yes_mid, 4), 0.0, 0.0),
+        no_token=Token("n", Side.NO, no_mid, no_mid - 0.01, no_mid + 0.01),
         platform=platform,
     )
 
@@ -131,6 +132,24 @@ def test_spread_calculation():
     matches = find_matches(poly, kalshi, min_confidence=0.3)
     assert len(matches) >= 1
     assert matches[0].yes_spread == 0.05
+
+
+def test_arb_profit_calculation():
+    """Cross-platform arb profit uses ask prices, not midpoints."""
+    # Poly YES ask=0.51, NO ask=0.51 (mid=0.50, spread ±0.01)
+    # Kalshi YES ask=0.41, NO ask=0.61 (mid=0.40, spread ±0.01)
+    # BUY YES Kalshi (0.41) + BUY NO Poly (0.51) = 0.92 → profit 0.08
+    poly = [_mkt("Will X happen?", 0.50)]
+    kalshi = [_mkt("Will X happen?", 0.40, "kalshi")]
+    matches = find_matches(poly, kalshi, min_confidence=0.3)
+    assert len(matches) == 1
+    pair = matches[0]
+    assert pair.profit_buy_kalshi_yes == round(1.0 - 0.41 - 0.51, 4)  # 0.08
+    assert pair.profit_buy_poly_yes == round(1.0 - 0.51 - 0.61, 4)   # -0.12
+    profit, side, _, _, price = pair.best_arb
+    assert profit == round(1.0 - 0.41 - 0.51, 4)
+    assert side == "yes"
+    assert abs(price - 0.41) < 1e-9
 
 
 def test_multiple_matches_sorted_by_confidence():
