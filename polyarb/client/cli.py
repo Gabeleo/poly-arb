@@ -96,9 +96,17 @@ class ClientShell(cmd.Cmd):
         print()
 
     def do_scan(self, arg: str) -> None:
-        """Fetch all daemon findings (cross-platform matches + single-platform opps)."""
-        matches = self.client.get_matches()
-        opps = self.client.get_opportunities()
+        """Show daemon findings. Usage: scan [--cross | --single]"""
+        flag = arg.strip().lower()
+        show_cross = flag != "--single"
+        show_single = flag != "--cross"
+
+        if flag and flag not in ("--cross", "--single"):
+            print(f"{YELLOW}Usage: scan [--cross | --single]{R}")
+            return
+
+        matches = self.client.get_matches() if show_cross else []
+        opps = self.client.get_opportunities() if show_single else []
 
         if matches is None or opps is None:
             print(f"{RED}Could not reach daemon.{R}")
