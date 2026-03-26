@@ -10,10 +10,15 @@ services:
     ports:
       - "8080:8080"
     command: ["--daemon", "--host", "0.0.0.0"]
+    env_file:
+      - .env
     environment:
       - KALSHI_API_KEY=${KALSHI_API_KEY:-}
       - KALSHI_KEY_FILE=/run/secrets/kalshi_key
       - KALSHI_ENV=${KALSHI_ENV:-demo}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - http_proxy=${http_proxy:-}
