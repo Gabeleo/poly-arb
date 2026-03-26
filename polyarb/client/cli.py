@@ -18,6 +18,21 @@ def _trunc(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "\u2026"
 
 
+def _link(url: str, text: str) -> str:
+    """OSC 8 terminal hyperlink — clickable in modern terminals."""
+    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+
+
+def _market_url(market: dict) -> str:
+    """Reconstruct a market URL from serialized market data."""
+    slug = market.get("event_slug", "")
+    if not slug:
+        return ""
+    if market.get("platform") == "kalshi":
+        return f"https://kalshi.com/events/{slug}"
+    return f"https://polymarket.com/event/{slug}"
+
+
 class ClientShell(cmd.Cmd):
     prompt = f"{B}polyarb> {R}"
 
@@ -176,14 +191,22 @@ class ClientShell(cmd.Cmd):
         print(f"\n{B}{color}Cross-Platform Match #{idx}{R}  ({conf:.0%} confidence)\n")
 
         pm = data.get("poly_market", {})
-        print(f"  {B}Polymarket:{R} {pm.get('question', '?')}")
+        pm_url = _market_url(pm)
+        pm_label = _link(pm_url, pm.get("question", "?")) if pm_url else pm.get("question", "?")
+        print(f"  {B}Polymarket:{R} {pm_label}")
+        if pm_url:
+            print(f"    {DIM}{pm_url}{R}")
         yt = pm.get("yes_token", {})
         nt = pm.get("no_token", {})
         print(f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}")
         print(f"    NO   mid={nt.get('midpoint', 0):.4f}  bid={nt.get('best_bid', 0):.4f}  ask={nt.get('best_ask', 0):.4f}")
 
         km = data.get("kalshi_market", {})
-        print(f"\n  {B}Kalshi:{R} {km.get('question', '?')}")
+        km_url = _market_url(km)
+        km_label = _link(km_url, km.get("question", "?")) if km_url else km.get("question", "?")
+        print(f"\n  {B}Kalshi:{R} {km_label}")
+        if km_url:
+            print(f"    {DIM}{km_url}{R}")
         yt = km.get("yes_token", {})
         nt = km.get("no_token", {})
         print(f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}")
@@ -202,8 +225,13 @@ class ClientShell(cmd.Cmd):
 
         print(f"\n{B}{color}Single-Platform Opportunity #{idx}{R}  (type: {arb_type})\n")
 
-        mkt = data.get("market", {})
-        print(f"  {B}Market:{R} {mkt.get('question', '?')}")
+        markets = data.get("markets", [])
+        mkt = markets[0] if markets else {}
+        mkt_url = _market_url(mkt)
+        mkt_label = _link(mkt_url, mkt.get("question", "?")) if mkt_url else mkt.get("question", "?")
+        print(f"  {B}Market:{R} {mkt_label}")
+        if mkt_url:
+            print(f"    {DIM}{mkt_url}{R}")
 
         yes_price = mkt.get("yes_price", data.get("yes_price", 0))
         no_price = mkt.get("no_price", data.get("no_price", 0))
