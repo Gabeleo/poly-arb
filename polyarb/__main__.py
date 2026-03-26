@@ -3,9 +3,7 @@
 Modes:
   (default)        Thin client CLI — connects to running daemon
   --daemon         Start the daemon (REST + WS + scan loop)
-  --mock           Legacy sync CLI with MockDataProvider
-  --poly           Legacy sync CLI with live Polymarket data
-  --kalshi         Legacy sync CLI with live Kalshi data
+  --mock           Run detection on mock data and print results
 """
 
 import argparse
@@ -21,15 +19,7 @@ def main() -> None:
     )
     mode.add_argument(
         "--mock", action="store_true",
-        help="Legacy sync CLI with mock data",
-    )
-    mode.add_argument(
-        "--poly", action="store_true",
-        help="Legacy sync CLI with live Polymarket data",
-    )
-    mode.add_argument(
-        "--kalshi", action="store_true",
-        help="Legacy sync CLI with live Kalshi data",
+        help="Run detection on mock data and print results",
     )
 
     # Client options
@@ -54,19 +44,22 @@ def main() -> None:
         daemon_main()
 
     elif args.mock:
-        from polyarb.cli import PolyarbShell
-        shell = PolyarbShell(live=False, kalshi=False)
-        shell.cmdloop()
+        from polyarb.data.mock import MockDataProvider
+        from polyarb.engine.single import detect_single
+        from polyarb.engine.multi import detect_multi
+        from polyarb.data.base import group_events
+        from polyarb.config import Config
 
-    elif args.poly:
-        from polyarb.cli import PolyarbShell
-        shell = PolyarbShell(live=True, kalshi=False)
-        shell.cmdloop()
-
-    elif args.kalshi:
-        from polyarb.cli import PolyarbShell
-        shell = PolyarbShell(live=False, kalshi=True)
-        shell.cmdloop()
+        config = Config()
+        provider = MockDataProvider(drift=True)
+        markets = provider.get_active_markets()
+        events = group_events(markets)
+        opps = detect_single(markets, config) + detect_multi(events, config)
+        if opps:
+            for i, opp in enumerate(opps, 1):
+                print(f"[{i}] {opp.summary()}")
+        else:
+            print("No opportunities found in mock data.")
 
     else:
         # Default: thin client CLI
