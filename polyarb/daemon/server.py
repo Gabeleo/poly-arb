@@ -54,7 +54,10 @@ def create_app(
                 )
 
         # Validate value constraints
-        _GT_ZERO = {"scan_interval", "order_size", "dedup_window", "approval_timeout", "digest_interval"}
+        _GT_ZERO = {
+            "scan_interval", "order_size", "dedup_window", "approval_timeout",
+            "digest_interval", "match_candidate_threshold", "match_final_threshold",
+        }
         _GTE_ZERO = {"min_profit"}
         for key, value in body.items():
             if key in _GT_ZERO and value <= 0:

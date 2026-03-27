@@ -72,11 +72,24 @@ def main() -> None:
     else:
         logger.info("Telegram not configured (set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)")
 
+    # Optional cross-encoder verification
+    encoder_client = None
+    encoder_url = os.environ.get("ENCODER_URL")
+    if encoder_url:
+        from polyarb.matching.encoder_client import EncoderClient
+
+        encoder_client = EncoderClient(encoder_url)
+        logger.info("Cross-encoder verification enabled (%s)", encoder_url)
+    else:
+        logger.info("Cross-encoder not configured (set ENCODER_URL)")
+
     @asynccontextmanager
     async def lifespan(app):
         # startup
         scan_task = asyncio.get_event_loop().create_task(
-            run_scan_loop(state, poly, kalshi, approval_manager, telegram_bot)
+            run_scan_loop(
+                state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
+            )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
 
@@ -99,6 +112,8 @@ def main() -> None:
             await kalshi_client.close()
         if telegram_bot is not None:
             await telegram_bot.close()
+        if encoder_client is not None:
+            await encoder_client.close()
         logger.info("Daemon stopped")
 
     app = create_app(

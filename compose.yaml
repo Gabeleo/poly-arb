@@ -1,4 +1,20 @@
 services:
+  encoder:
+    build:
+      context: ./encoder
+    ports:
+      - "8000:8000"
+    volumes:
+      - encoder-cache:/cache
+    environment:
+      - TRANSFORMERS_CACHE=/cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
   daemon:
     build:
       context: .
@@ -13,6 +29,7 @@ services:
     env_file:
       - .env
     environment:
+      - ENCODER_URL=${ENCODER_URL:-http://encoder:8000}
       - KALSHI_API_KEY=${KALSHI_API_KEY:-}
       - KALSHI_KEY_FILE=/run/secrets/kalshi_key
       - KALSHI_ENV=${KALSHI_ENV:-demo}
@@ -25,6 +42,9 @@ services:
       - https_proxy=${https_proxy:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${no_proxy:-}
+    depends_on:
+      encoder:
+        condition: service_healthy
     volumes:
       - ${KALSHI_KEY_FILE:-.docker-dummy-key}:/run/secrets/kalshi_key:ro
 
@@ -37,3 +57,6 @@ services:
     command: ["--url", "http://127.0.0.1:8080"]
     depends_on:
       - daemon
+
+volumes:
+  encoder-cache:

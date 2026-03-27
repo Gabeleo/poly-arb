@@ -10,3 +10,5 @@ class Config:
     dedup_window: int = 60
     approval_timeout: float = 120.0
     digest_interval: float = 3600.0
+    match_candidate_threshold: float = 0.15
+    match_final_threshold: float = 0.5
