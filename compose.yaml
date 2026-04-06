@@ -29,6 +29,7 @@ services:
     env_file:
       - .env
     environment:
+      - POLYARB_API_KEY=${POLYARB_API_KEY:-}
       - ENCODER_URL=${ENCODER_URL:-http://encoder:8000}
       - KALSHI_API_KEY=${KALSHI_API_KEY:-}
       - KALSHI_KEY_FILE=/run/secrets/kalshi_key
@@ -42,6 +43,12 @@ services:
       - https_proxy=${https_proxy:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${no_proxy:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       encoder:
         condition: service_healthy

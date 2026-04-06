@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from polyarb.config import Config
-from polyarb.daemon.engine import run_scan_loop
+from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
 from polyarb.daemon.server import create_app
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
@@ -41,14 +41,14 @@ def main() -> None:
 
     # Optional authenticated Kalshi client for execution
     kalshi_client = None
-    api_key = os.environ.get("KALSHI_API_KEY")
+    kalshi_api_key = os.environ.get("KALSHI_API_KEY")
     key_file = os.environ.get("KALSHI_KEY_FILE")
-    if api_key and key_file:
+    if kalshi_api_key and key_file:
         try:
             from polyarb.execution.async_kalshi import AsyncKalshiClient
             from polyarb.execution.kalshi import KalshiAuth
 
-            auth = KalshiAuth(api_key, key_file)
+            auth = KalshiAuth(kalshi_api_key, key_file)
             kalshi_client = AsyncKalshiClient(auth)
             logger.info("Kalshi execution client configured")
         except Exception as exc:
@@ -83,12 +83,15 @@ def main() -> None:
     else:
         logger.info("Cross-encoder not configured (set ENCODER_URL)")
 
+    stop_event = asyncio.Event()
+
     @asynccontextmanager
     async def lifespan(app):
         # startup
         scan_task = asyncio.get_event_loop().create_task(
             run_scan_loop(
                 state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
+                stop_event=stop_event,
             )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
@@ -100,12 +103,22 @@ def main() -> None:
                 logger.info("Telegram webhook registered: %s", webhook_url)
 
         yield
-        # shutdown
-        scan_task.cancel()
+
+        # Graceful shutdown: signal the loop to finish its current scan
+        logger.info("Shutting down — waiting for current scan to finish...")
+        stop_event.set()
         try:
-            await scan_task
+            await asyncio.wait_for(scan_task, timeout=FETCH_TIMEOUT + 10)
+        except asyncio.TimeoutError:
+            logger.warning("Scan did not finish in time, cancelling")
+            scan_task.cancel()
+            try:
+                await scan_task
+            except asyncio.CancelledError:
+                pass
         except asyncio.CancelledError:
             pass
+
         await poly.close()
         await kalshi.close()
         if kalshi_client is not None:
@@ -116,12 +129,19 @@ def main() -> None:
             await encoder_client.close()
         logger.info("Daemon stopped")
 
+    api_key = os.environ.get("POLYARB_API_KEY")
+    if api_key:
+        logger.info("API key authentication enabled")
+    else:
+        logger.warning("POLYARB_API_KEY not set — protected endpoints are unauthenticated")
+
     app = create_app(
         state,
         kalshi_client=kalshi_client,
         lifespan=lifespan,
         approval_manager=approval_manager,
         telegram_bot=telegram_bot,
+        api_key=api_key,
     )
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

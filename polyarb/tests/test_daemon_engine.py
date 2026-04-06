@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from polyarb.config import Config
-from polyarb.daemon.engine import run_scan_once
+from polyarb.daemon.engine import _CircuitBreaker, run_scan_once
 from polyarb.daemon.state import State
 from polyarb.models import Market, Side, Token
 
@@ -200,3 +200,46 @@ async def test_no_encoder_uses_token_matcher():
     await run_scan_once(state, poly, kalshi, encoder_client=None)
 
     assert len(state.matches) >= 1
+
+
+# ── Circuit breaker tests ────────────────────────────────────
+
+
+def test_circuit_breaker_starts_closed():
+    cb = _CircuitBreaker("test")
+    assert cb.is_open is False
+    assert cb.backoff_delay == 0.0
+
+
+def test_circuit_breaker_opens_after_threshold():
+    cb = _CircuitBreaker("test")
+    for _ in range(5):
+        cb.record_failure(RuntimeError("fail"))
+    assert cb.is_open is True
+    assert cb.backoff_delay > 0
+
+
+def test_circuit_breaker_resets_on_success():
+    cb = _CircuitBreaker("test")
+    for _ in range(5):
+        cb.record_failure(RuntimeError("fail"))
+    assert cb.is_open is True
+    cb.record_success()
+    assert cb.is_open is False
+    assert cb.backoff_delay == 0.0
+
+
+async def test_scan_continues_with_provider_timeout():
+    """If a provider raises, scan completes with empty markets for that side."""
+
+    class FailingProvider(FakeProvider):
+        async def get_active_markets(self):
+            raise TimeoutError("API timeout")
+
+    poly = FailingProvider([])
+    kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
+    state = State(config=Config())
+
+    # Should not raise — the scan should handle the failure gracefully
+    await run_scan_once(state, poly, kalshi)
+    assert state.scan_count == 1

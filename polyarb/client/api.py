@@ -12,9 +12,14 @@ class DaemonClient:
         self,
         base_url: str = "http://127.0.0.1:8080",
         client: httpx.Client | None = None,
+        api_key: str | None = None,
     ) -> None:
-        self._client = client or httpx.Client(base_url=base_url, timeout=10.0)
+        headers = {"X-API-Key": api_key} if api_key else {}
+        self._client = client or httpx.Client(
+            base_url=base_url, timeout=10.0, headers=headers,
+        )
         self._owns_client = client is None
+        self._api_key = api_key
 
     # ── helpers ─────────────────────────────────────────────
 

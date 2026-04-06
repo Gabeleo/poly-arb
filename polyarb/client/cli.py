@@ -36,10 +36,10 @@ def _market_url(market: dict) -> str:
 class ClientShell(cmd.Cmd):
     prompt = f"{B}polyarb> {R}"
 
-    def __init__(self, daemon_url: str = "http://127.0.0.1:8080") -> None:
+    def __init__(self, daemon_url: str = "http://127.0.0.1:8080", api_key: str = "") -> None:
         super().__init__()
         self.daemon_url = daemon_url
-        self.client = DaemonClient(base_url=daemon_url)
+        self.client = DaemonClient(base_url=daemon_url, api_key=api_key or None)
         self._scan_results: list[tuple[str, dict]] = []
 
         ws_url = daemon_url.replace("http://", "ws://").replace("https://", "wss://")

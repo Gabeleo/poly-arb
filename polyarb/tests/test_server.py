@@ -43,14 +43,29 @@ def _make_state() -> State:
     return State(config=Config())
 
 
-def _make_client(state: State | None = None, kalshi_client=None) -> TestClient:
+def _make_client(
+    state: State | None = None,
+    kalshi_client=None,
+    api_key: str | None = None,
+) -> TestClient:
     if state is None:
         state = _make_state()
-    app = create_app(state, kalshi_client=kalshi_client)
+    app = create_app(state, kalshi_client=kalshi_client, api_key=api_key)
     return TestClient(app)
 
 
-# ── GET /status ────────────────────────────────────────────
+# ── GET /health ───────────────────────────────────────────
+
+
+def test_health_starting():
+    client = _make_client()
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["checks"]["scan_loop"] == "starting"
+
+
+# ── GET /status ────��───────────────────────────────────────
 
 
 def test_status_returns_fields():
@@ -65,7 +80,7 @@ def test_status_returns_fields():
     assert "opportunity_count" in data
 
 
-# ── GET /matches ───────────────────────────────────────────
+# ── GET /matches ─────────────────��─────────────────────────
 
 
 def test_matches_empty():
@@ -140,7 +155,7 @@ def test_opportunities_populated():
     assert len(data) == 2
 
 
-# ── GET /config ────────────────────────────────────────────
+# ── GET /config ────��───────────────────────────────────────
 
 
 def test_get_config():
@@ -152,7 +167,7 @@ def test_get_config():
     assert "scan_interval" in data
 
 
-# ── POST /config ───────────────────────────────────────────
+# ── POST /config ──────���────────────────────────────────────
 
 
 def test_post_config_updates():
@@ -209,49 +224,47 @@ def test_post_config_rejects_zero_dedup_window():
 # ── POST /execute/{id} ────────────────────────────────────
 
 
-def test_execute_no_kalshi_client():
+def test_execute_returns_503():
+    """Execution is blocked until both platform legs are implemented."""
     state = State(config=Config())
     state.matches = [_pair("p1", "k1")]
-    client = _make_client(state, kalshi_client=None)
+    client = _make_client(state)
 
     resp = client.post("/execute/1")
-    assert resp.status_code == 409
+    assert resp.status_code == 503
+    assert "disabled" in resp.json()["error"].lower()
 
 
-def test_execute_invalid_id():
-    state = State(config=Config())
-    state.matches = [_pair("p1", "k1")]
-
-    class FakeKalshi:
-        pass
-
-    client = _make_client(state, kalshi_client=FakeKalshi())
-    resp = client.post("/execute/99")
-    assert resp.status_code == 404
+# ── API key auth ──────────────────────────────────────────
 
 
-def test_execute_happy_path():
-    """POST /execute/1 with a valid match and fake kalshi_client returns 200."""
+def test_auth_blocks_unauthenticated_config_post():
+    client = _make_client(api_key="secret123")
+    resp = client.post("/config", json={"min_profit": 0.01})
+    assert resp.status_code == 401
 
-    class FakeKalshiClient:
-        async def create_order(self, **kwargs):
-            return {"order_id": "ord_123", "status": "resting", "fill_count_fp": "0"}
 
-    state = State(config=Config())
-    state.matches = [_pair("p1", "k1")]
-    client = _make_client(state, kalshi_client=FakeKalshiClient())
-
-    resp = client.post("/execute/1")
+def test_auth_allows_authenticated_config_post():
+    client = _make_client(api_key="secret123")
+    resp = client.post(
+        "/config",
+        json={"min_profit": 0.01},
+        headers={"X-API-Key": "secret123"},
+    )
     assert resp.status_code == 200
-    data = resp.json()
-    assert "order" in data
-    assert "match_id" in data
-    assert data["match_id"] == 1
-    assert data["order"]["order_id"] == "ord_123"
-    assert data["order"]["status"] == "resting"
 
 
-# ── WebSocket /ws ────────────────────────────────────────
+def test_auth_allows_public_reads():
+    """GET endpoints are public even with auth enabled."""
+    client = _make_client(api_key="secret123")
+    assert client.get("/status").status_code == 200
+    assert client.get("/matches").status_code == 200
+    assert client.get("/opportunities").status_code == 200
+    assert client.get("/config").status_code == 200
+    assert client.get("/health").status_code == 200
+
+
+# ── WebSocket /ws ───────��────────────────────────────────
 
 
 def test_ws_connect_and_disconnect():

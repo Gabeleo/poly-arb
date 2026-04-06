@@ -20,6 +20,10 @@ COPY polyarb/ polyarb/
 
 RUN pip install --no-cache-dir -e ".[dev,trade]"
 
+# Run as non-root
+RUN useradd --create-home appuser
+USER appuser
+
 EXPOSE 8080
 
 ENTRYPOINT ["python", "-m", "polyarb"]

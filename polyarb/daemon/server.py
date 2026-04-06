@@ -2,16 +2,76 @@
 
 from __future__ import annotations
 
-import dataclasses
+import logging
 from typing import Any
 
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
+from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket
 
+from polyarb.daemon.routes import (
+    execute,
+    get_config,
+    health,
+    match_detail,
+    matches,
+    opportunities,
+    post_config,
+    status,
+    telegram_webhook,
+    ws_endpoint,
+)
 from polyarb.daemon.state import State
+
+logger = logging.getLogger(__name__)
+
+# Routes that require API key authentication (method, path_prefix)
+_PROTECTED_ROUTES: list[tuple[str, str]] = [
+    ("POST", "/config"),
+    ("POST", "/execute/"),
+]
+
+
+class ApiKeyMiddleware:
+    """ASGI middleware that enforces X-API-Key on protected routes and /ws."""
+
+    def __init__(self, app: ASGIApp, api_key: str) -> None:
+        self.app = app
+        self._api_key = api_key
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "websocket":
+            # Check query param ?api_key= for WebSocket (headers unreliable in browsers)
+            qs = scope.get("query_string", b"").decode()
+            params = dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
+            if params.get("api_key") != self._api_key:
+                ws = WebSocket(scope, receive, send)
+                await ws.close(code=4003)
+                return
+        elif scope["type"] == "http":
+            method = scope.get("method", "")
+            path = scope.get("path", "")
+            if self._is_protected(method, path):
+                headers = dict(scope.get("headers", []))
+                key = headers.get(b"x-api-key", b"").decode()
+                if key != self._api_key:
+                    resp = JSONResponse(
+                        {"error": "unauthorized"}, status_code=401
+                    )
+                    await resp(scope, receive, send)
+                    return
+
+        await self.app(scope, receive, send)
+
+    def _is_protected(self, method: str, path: str) -> bool:
+        for req_method, prefix in _PROTECTED_ROUTES:
+            if method == req_method and path.startswith(prefix):
+                return True
+        return False
 
 
 def create_app(
@@ -20,144 +80,12 @@ def create_app(
     lifespan: Any = None,
     approval_manager: Any = None,
     telegram_bot: Any = None,
+    api_key: str | None = None,
 ) -> Starlette:
     """Build and return a Starlette application wired to *state*."""
 
-    async def status(request: Request) -> JSONResponse:
-        return JSONResponse(state.status_dict())
-
-    async def matches(request: Request) -> JSONResponse:
-        return JSONResponse([m.to_dict() for m in state.matches])
-
-    async def match_detail(request: Request) -> JSONResponse:
-        try:
-            idx = int(request.path_params["id"])
-        except (ValueError, KeyError):
-            return JSONResponse({"error": "invalid id"}, status_code=400)
-        if idx < 1 or idx > len(state.matches):
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse(state.matches[idx - 1].to_dict())
-
-    async def opportunities(request: Request) -> JSONResponse:
-        return JSONResponse([o.to_dict() for o in state.opportunities])
-
-    async def get_config(request: Request) -> JSONResponse:
-        return JSONResponse(dataclasses.asdict(state.config))
-
-    async def post_config(request: Request) -> JSONResponse:
-        body = await request.json()
-        valid_fields = {f.name for f in dataclasses.fields(state.config)}
-        for key in body:
-            if key not in valid_fields:
-                return JSONResponse(
-                    {"error": f"unknown config key: {key}"}, status_code=400
-                )
-
-        # Validate value constraints
-        _GT_ZERO = {
-            "scan_interval", "order_size", "dedup_window", "approval_timeout",
-            "digest_interval", "match_candidate_threshold", "match_final_threshold",
-        }
-        _GTE_ZERO = {"min_profit"}
-        for key, value in body.items():
-            if key in _GT_ZERO and value <= 0:
-                return JSONResponse(
-                    {"error": f"{key} must be > 0"}, status_code=400
-                )
-            if key in _GTE_ZERO and value < 0:
-                return JSONResponse(
-                    {"error": f"{key} must be >= 0"}, status_code=400
-                )
-
-        for key, value in body.items():
-            field_type = type(getattr(state.config, key))
-            setattr(state.config, key, field_type(value))
-        return JSONResponse(dataclasses.asdict(state.config))
-
-    async def execute(request: Request) -> JSONResponse:
-        if kalshi_client is None:
-            return JSONResponse(
-                {"error": "no kalshi client connected"}, status_code=409
-            )
-        try:
-            idx = int(request.path_params["id"])
-        except (ValueError, KeyError):
-            return JSONResponse({"error": "invalid id"}, status_code=400)
-        if idx < 1 or idx > len(state.matches):
-            return JSONResponse({"error": "not found"}, status_code=404)
-
-        match = state.matches[idx - 1]
-        profit, kalshi_side, kalshi_desc, poly_desc, kalshi_price = match.best_arb
-
-        price_cents = int(round(kalshi_price * 100))
-        count = int(state.config.order_size)
-        ticker = match.kalshi_market.condition_id
-
-        result = await kalshi_client.create_order(
-            ticker=ticker,
-            side=kalshi_side,
-            action="buy",
-            price_cents=price_cents,
-            count=count,
-        )
-        return JSONResponse({"order": result, "match_id": idx})
-
-    async def telegram_webhook(request: Request) -> JSONResponse:
-        body = await request.json()
-
-        if not telegram_bot:
-            return JSONResponse({"ok": True})
-
-        # Handle /scan command
-        message = body.get("message", {})
-        text = (message.get("text") or "").strip()
-        if text == "/scan":
-            try:
-                await telegram_bot.send_digest(state.opportunities)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception("Failed to send /scan digest")
-            return JSONResponse({"ok": True})
-
-        # Handle button callbacks
-        callback = body.get("callback_query")
-        if not callback or not approval_manager:
-            return JSONResponse({"ok": True})
-
-        data = callback.get("data", "")
-        callback_id = callback.get("id", "")
-
-        try:
-            if data.startswith("approve:"):
-                approval_id = data.split(":", 1)[1]
-                await approval_manager.handle_approve(approval_id)
-            elif data.startswith("reject:"):
-                approval_id = data.split(":", 1)[1]
-                await approval_manager.handle_reject(approval_id)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Webhook handler error")
-        finally:
-            if callback_id:
-                try:
-                    await telegram_bot.answer_callback(callback_id)
-                except Exception:
-                    pass
-
-        return JSONResponse({"ok": True})
-
-    async def ws_endpoint(websocket: WebSocket) -> None:
-        await websocket.accept()
-        state.ws_clients.add(websocket)
-        try:
-            while True:
-                await websocket.receive_text()
-        except Exception:
-            pass
-        finally:
-            state.ws_clients.discard(websocket)
-
     routes = [
+        Route("/health", health, methods=["GET"]),
         Route("/status", status, methods=["GET"]),
         Route("/matches", matches, methods=["GET"]),
         Route("/matches/{id:int}", match_detail, methods=["GET"]),
@@ -169,4 +97,17 @@ def create_app(
         WebSocketRoute("/ws", ws_endpoint),
     ]
 
-    return Starlette(routes=routes, lifespan=lifespan)
+    middleware = []
+    if api_key:
+        middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))
+        logger.info("API key authentication enabled")
+
+    app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
+
+    # Store dependencies on app.state so route handlers can access them
+    app.state.daemon_state = state
+    app.state.kalshi_client = kalshi_client
+    app.state.approval_manager = approval_manager
+    app.state.telegram_bot = telegram_bot
+
+    return app

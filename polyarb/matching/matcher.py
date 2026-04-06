@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from typing import Protocol
 
 from polyarb.matching.normalize import extract_years, normalize, tokenize
 from polyarb.models import Market
@@ -229,3 +230,56 @@ def generate_all_pairs(
         MatchedPair(poly_markets[i], kalshi_markets[j], 0.0)
         for _, i, j in top
     ]
+
+
+# ── MatchingStrategy protocol ─────────────────────────────────────
+
+
+class MatchingStrategy(Protocol):
+    """Protocol for cross-platform market matching strategies."""
+
+    async def match(
+        self,
+        poly_markets: list[Market],
+        kalshi_markets: list[Market],
+        threshold: float,
+    ) -> list[MatchedPair]:
+        """Return matched pairs above the given confidence threshold."""
+        ...
+
+
+class TokenMatcher:
+    """Token-based matching using Jaccard, containment, and SequenceMatcher."""
+
+    async def match(
+        self,
+        poly_markets: list[Market],
+        kalshi_markets: list[Market],
+        threshold: float,
+    ) -> list[MatchedPair]:
+        import asyncio
+        return await asyncio.to_thread(
+            find_matches, poly_markets, kalshi_markets, threshold,
+        )
+
+
+class EncoderMatcher:
+    """Two-phase matching: generate all pairs, then verify with cross-encoder."""
+
+    def __init__(self, encoder_client, final_threshold: float = 0.5) -> None:
+        self._encoder = encoder_client
+        self._threshold = final_threshold
+
+    async def match(
+        self,
+        poly_markets: list[Market],
+        kalshi_markets: list[Market],
+        threshold: float,
+    ) -> list[MatchedPair]:
+        import asyncio
+        from polyarb.daemon.engine import _verify_candidates
+
+        candidates = await asyncio.to_thread(
+            generate_all_pairs, poly_markets, kalshi_markets,
+        )
+        return await _verify_candidates(candidates, self._encoder, threshold)

@@ -14,7 +14,7 @@ from polyarb.models import Market, Side, Token
 from polyarb.notifications.approval import ApprovalManager, PendingApproval
 
 
-# ── Fake dependencies ──────────────────────────────────────
+# ── Fake dependencies ──────��───────────────────────────────
 
 
 class FakeBot:
@@ -72,20 +72,23 @@ def _make_market(
 
 
 def _profitable_pair() -> MatchedPair:
-    """poly_no_ask=0.35, kalshi_yes_ask=0.62 -> cost=0.97, profit=0.03."""
-    poly = _make_market("poly-1", "Will BTC hit $100k?", "polymarket", 0.65, no_ask=0.35)
-    kalshi = _make_market("kalshi-1", "Bitcoin above $100k?", "kalshi", 0.62)
+    """Profitable after fees.
+
+    Direction: buy YES on Kalshi (0.40) + buy NO on Poly (0.50)
+    Gross cost = 0.90, well under 1.00 → profitable even after fees.
+    """
+    poly = _make_market("poly-1", "Will BTC hit $100k?", "polymarket", 0.50, no_ask=0.50)
+    kalshi = _make_market("kalshi-1", "Bitcoin above $100k?", "kalshi", 0.40, no_ask=0.60)
     return MatchedPair(poly_market=poly, kalshi_market=kalshi, confidence=0.85)
 
 
 def _unprofitable_pair() -> MatchedPair:
-    """Both directions unprofitable.
+    """Both directions unprofitable after fees.
 
-    Direction 1: kalshi_yes_ask(0.62) + poly_no_ask(0.55) = 1.17 -> profit = -0.17
-    Direction 2: poly_yes_ask(0.55) + kalshi_no_ask(0.62) = 1.17 -> profit = -0.17
+    Symmetric prices — no arb exists.
     """
     poly = _make_market("poly-1", "Will BTC hit $100k?", "polymarket", 0.55, no_ask=0.55)
-    kalshi = _make_market("kalshi-1", "Bitcoin above $100k?", "kalshi", 0.62, no_ask=0.62)
+    kalshi = _make_market("kalshi-1", "Bitcoin above $100k?", "kalshi", 0.55, no_ask=0.55)
     return MatchedPair(poly_market=poly, kalshi_market=kalshi, confidence=0.85)
 
 
@@ -112,11 +115,17 @@ def test_should_alert_first_time():
     assert mgr.should_alert(match) is True
 
 
+def test_should_alert_unprofitable_returns_false():
+    mgr, _, _, _ = _make_manager()
+    match = _unprofitable_pair()
+    assert mgr.should_alert(match) is False
+
+
 def test_should_alert_same_profit_returns_false():
     mgr, _, _, _ = _make_manager()
     match = _profitable_pair()
     key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
-    mgr._alerted[key] = match.best_arb[0]
+    mgr._alerted[key] = mgr.fee_adjusted_profit(match)
     assert mgr.should_alert(match) is False
 
 
@@ -124,7 +133,7 @@ def test_should_alert_higher_profit_returns_true():
     mgr, _, _, _ = _make_manager()
     match = _profitable_pair()
     key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
-    mgr._alerted[key] = match.best_arb[0] - 0.01  # lower than current
+    mgr._alerted[key] = mgr.fee_adjusted_profit(match) - 0.01  # lower than current
     assert mgr.should_alert(match) is True
 
 
@@ -132,8 +141,25 @@ def test_should_alert_lower_profit_returns_false():
     mgr, _, _, _ = _make_manager()
     match = _profitable_pair()
     key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
-    mgr._alerted[key] = match.best_arb[0] + 0.01  # higher than current
+    mgr._alerted[key] = mgr.fee_adjusted_profit(match) + 0.01  # higher than current
     assert mgr.should_alert(match) is False
+
+
+# ── Tests: fee_adjusted_profit ────────────────────────────
+
+
+def test_fee_adjusted_profit_positive():
+    mgr, _, _, _ = _make_manager()
+    match = _profitable_pair()
+    profit = mgr.fee_adjusted_profit(match)
+    assert profit > 0
+
+
+def test_fee_adjusted_profit_negative_for_unprofitable():
+    mgr, _, _, _ = _make_manager()
+    match = _unprofitable_pair()
+    profit = mgr.fee_adjusted_profit(match)
+    assert profit <= 0
 
 
 # ── Tests: on_new_matches ──────────────────────────────────
@@ -151,7 +177,6 @@ async def test_on_new_matches_sends_alert_for_profitable():
     approval_id = list(mgr._pending.keys())[0]
     pending = mgr._pending[approval_id]
     assert pending.match_key == "poly-1:kalshi-1"
-    assert pending.profit_at_alert == match.best_arb[0]
 
 
 @pytest.mark.asyncio
@@ -176,11 +201,11 @@ async def test_on_new_matches_respects_should_alert():
     assert len(bot.alerts) == 1  # only one alert sent
 
 
-# ── Tests: handle_approve ──────────────────────────────────
+# ── Tests: handle_approve (execution blocked) ────────────
 
 
 @pytest.mark.asyncio
-async def test_handle_approve_executes_trade():
+async def test_handle_approve_returns_execution_blocked():
     mgr, bot, kalshi, state = _make_manager()
     match = _profitable_pair()
     state.matches = [match]
@@ -190,28 +215,10 @@ async def test_handle_approve_executes_trade():
 
     result = await mgr.handle_approve(approval_id)
 
-    assert len(kalshi.orders) == 1
-    assert approval_id not in mgr._pending
-    assert len(bot.edits) == 1
-    assert "ord_1" in result or "resting" in result
-
-
-@pytest.mark.asyncio
-async def test_handle_approve_rejects_if_no_longer_profitable():
-    mgr, bot, kalshi, state = _make_manager()
-    match = _profitable_pair()
-    state.matches = [match]
-
-    await mgr.on_new_matches([match])
-    approval_id = list(mgr._pending.keys())[0]
-
-    # Replace state.matches with an unprofitable version
-    state.matches = [_unprofitable_pair()]
-
-    result = await mgr.handle_approve(approval_id)
-
+    # No orders placed — execution is blocked
     assert len(kalshi.orders) == 0
-    assert "no longer profitable" in result.lower() or "not profitable" in result.lower()
+    assert "disabled" in result.lower() or "not yet implemented" in result.lower()
+    assert len(bot.edits) == 1
 
 
 @pytest.mark.asyncio
@@ -221,7 +228,7 @@ async def test_handle_approve_unknown_id():
     assert "not found" in result.lower() or "expired" in result.lower()
 
 
-# ── Tests: handle_reject ───────────────────────────────────
+# ���─ Tests: handle_reject ───────────────────────────────────
 
 
 @pytest.mark.asyncio

@@ -6,3 +6,7 @@ __pycache__/
 .DS_Store
 .claude/worktrees/
 .env
+*.db
+*.key
+*.pem
+.docker-dummy-key

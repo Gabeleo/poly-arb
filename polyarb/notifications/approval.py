@@ -6,8 +6,10 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
+from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.matching.matcher import MatchedPair
+from polyarb.notifications.base import Notifier
 
 
 @dataclass
@@ -27,7 +29,7 @@ class ApprovalManager:
     and expires stale entries.
     """
 
-    def __init__(self, state, bot, kalshi_client, config: Config) -> None:
+    def __init__(self, state, bot: Notifier, kalshi_client, config: Config) -> None:
         self._state = state
         self._bot = bot
         self._kalshi_client = kalshi_client
@@ -37,13 +39,24 @@ class ApprovalManager:
 
     # ── Alerting logic ─────────────────────────────────────
 
+    def fee_adjusted_profit(self, match: MatchedPair) -> float:
+        """Compute net profit after fees using the cost model."""
+        pm = match.poly_market
+        km = match.kalshi_market
+        arb = compute_arb(
+            pm.yes_token.best_ask, pm.no_token.best_ask,
+            km.yes_token.best_ask, km.no_token.best_ask,
+        )
+        return arb.net_profit if arb else 0.0
+
     def should_alert(self, match: MatchedPair) -> bool:
         """Decide whether a match warrants a new Telegram alert.
 
-        Returns True on first sighting or when profit has improved since
-        the last alert for the same match key.
+        Uses the fee-adjusted cost model — only alerts on genuinely
+        profitable opportunities after Polymarket taker fees and
+        Kalshi entry fees.
         """
-        profit = match.best_arb[0]
+        profit = self.fee_adjusted_profit(match)
         if profit <= 0:
             return False
 
@@ -67,7 +80,7 @@ class ApprovalManager:
             message_id = await self._bot.send_alert(approval_id, match)
 
             key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
-            profit = match.best_arb[0]
+            profit = self.fee_adjusted_profit(match)
 
             self._pending[approval_id] = PendingApproval(
                 approval_id=approval_id,
@@ -82,7 +95,7 @@ class ApprovalManager:
     # ── Approval / rejection handlers ──────────────────────
 
     async def handle_approve(self, approval_id: str) -> str:
-        """Execute the trade if the arb is still profitable.
+        """Block execution until both platform legs are implemented.
 
         Returns a human-readable result description.
         """
@@ -90,51 +103,9 @@ class ApprovalManager:
         if pending is None:
             return "Approval not found or already expired"
 
-        # Find the current version of this match in state
-        current_match: MatchedPair | None = None
-        for m in self._state.matches:
-            key = f"{m.poly_market.condition_id}:{m.kalshi_market.condition_id}"
-            if key == pending.match_key:
-                current_match = m
-                break
-
-        if current_match is None:
-            await self._bot.edit_result(
-                pending.telegram_message_id, "Match no longer available"
-            )
-            return "Match no longer available"
-
-        profit = current_match.best_arb[0]
-        if profit <= 0:
-            await self._bot.edit_result(
-                pending.telegram_message_id,
-                "Arb no longer profitable, skipped",
-            )
-            return "Arb no longer profitable, skipped"
-
-        # Execute via Kalshi
-        _, kalshi_side, _, _, kalshi_price = current_match.best_arb
-        price_cents = int(round(kalshi_price * 100))
-
-        try:
-            result = await self._kalshi_client.create_order(
-                ticker=current_match.kalshi_market.condition_id,
-                side=kalshi_side,
-                action="buy",
-                price_cents=price_cents,
-                count=int(self._config.order_size),
-            )
-        except Exception as e:
-            msg = f"Execution failed: {e}"
-            await self._bot.edit_result(pending.telegram_message_id, msg)
-            return msg
-
-        order_id = result.get("order_id", "unknown")
-        status = result.get("status", "unknown")
-        description = f"Order {order_id} — status: {status}"
-
-        await self._bot.edit_result(pending.telegram_message_id, description)
-        return description
+        msg = "Execution disabled — Polymarket CLOB leg not yet implemented"
+        await self._bot.edit_result(pending.telegram_message_id, msg)
+        return msg
 
     async def handle_reject(self, approval_id: str) -> None:
         """Cancel a pending approval and update the Telegram message."""

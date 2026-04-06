@@ -7,6 +7,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
+# Run as non-root
+RUN useradd --create-home appuser && \
+    mkdir -p /cache && chown appuser:appuser /cache
+USER appuser
+
 ENV TRANSFORMERS_CACHE=/cache
 
 EXPOSE 8000

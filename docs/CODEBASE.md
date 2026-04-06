@@ -30,7 +30,8 @@ polyarb/
 ├── daemon/                  # Production system
 │   ├── __main__.py          # Entry: python -m polyarb.daemon
 │   ├── engine.py            # Scan loop: fetch → match → detect → push
-│   ├── server.py            # Starlette REST API + WebSocket
+│   ├── routes.py             # Route handlers (extracted from server.py)
+│   ├── server.py            # Starlette app factory + API key middleware
 │   └── state.py             # In-memory state: matches, opps, dedup, WS clients
 │
 ├── recorder/                # Market snapshot recording
@@ -50,6 +51,7 @@ polyarb/
 │   └── async_kalshi.py      # Async httpx Kalshi client
 │
 ├── notifications/           # Alerts and approval flow
+│   ├── base.py              # Notifier protocol
 │   ├── telegram.py          # TelegramBot: alerts, digests, callbacks
 │   └── approval.py          # ApprovalManager: Telegram-based trade approval
 │
@@ -189,6 +191,7 @@ python -m polyarb.tests.generate_mock_db
 
 | Variable | Purpose |
 |----------|---------|
+| `POLYARB_API_KEY` | API key for daemon protected endpoints |
 | `KALSHI_API_KEY` | Kalshi authenticated execution |
 | `KALSHI_KEY_FILE` | RSA private key path |
 | `ENCODER_URL` | Cross-encoder service endpoint |

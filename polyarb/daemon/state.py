@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ from datetime import datetime, timezone
 from polyarb.config import Config
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Opportunity
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -20,6 +23,7 @@ class State:
     scan_count: int = 0
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_scan_at: datetime | None = None
+    last_scan_error: str | None = None
     _seen_matches: dict[str, float] = field(default_factory=dict)
     _seen_opps: dict[str, float] = field(default_factory=dict)
 
@@ -66,7 +70,10 @@ class State:
             try:
                 await ws.send_json(message)
             except Exception:
+                logger.debug("Removing dead WS client: %s", ws)
                 dead.add(ws)
+        if dead:
+            logger.info("Pruned %d dead WebSocket client(s)", len(dead))
         self.ws_clients -= dead
 
     def status_dict(self) -> dict:
