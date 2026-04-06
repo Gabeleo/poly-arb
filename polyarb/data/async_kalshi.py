@@ -99,11 +99,14 @@ def _parse_market(
         question = yes_sub or ticker
 
     # ── Volume ──────────────────────────────────────────────
-    vol_str = raw.get("volume_24h_fp") or raw.get("volume_fp") or "0"
     try:
-        volume = float(vol_str)
+        volume = float(raw.get("volume_fp") or "0")
     except (ValueError, TypeError):
         volume = 0.0
+    try:
+        volume_24h = float(raw.get("volume_24h_fp") or "0")
+    except (ValueError, TypeError):
+        volume_24h = 0.0
 
     return Market(
         condition_id=ticker,
@@ -126,6 +129,7 @@ def _parse_market(
         event_slug=event_ticker,
         slug=ticker,
         volume=volume,
+        volume_24h=volume_24h,
         end_date=_parse_dt(raw.get("close_time")),
         platform="kalshi",
     )

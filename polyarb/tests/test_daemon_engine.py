@@ -119,6 +119,21 @@ async def test_encoder_verifies_candidates():
     assert len(encoder.pairs_sent) == 1
 
 
+async def test_encoder_receives_all_pairs():
+    """Encoder receives all Poly x Kalshi pairs, even with zero token overlap."""
+    poly = FakeProvider([_mkt("p1", "Will BTC hit $100k?")])
+    kalshi = FakeProvider([_mkt("k1", "Bitcoin above $100,000?", "kalshi")])
+    encoder = FakeEncoder(scores=[0.85])
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+
+    # Pair was sent to encoder despite zero shared tokens
+    assert len(encoder.pairs_sent) == 1
+    assert encoder.pairs_sent[0] == ("Will BTC hit $100k?", "Bitcoin above $100,000?")
+    assert len(state.matches) == 1
+
+
 async def test_encoder_filters_false_positives():
     """When encoder returns low score, candidate is excluded."""
     poly = FakeProvider([_mkt("p1", "Will X happen?")])
@@ -131,8 +146,26 @@ async def test_encoder_filters_false_positives():
     assert len(state.matches) == 0
 
 
-async def test_encoder_failure_falls_back_to_token_scores():
-    """When encoder returns None, fall back to token-based scores."""
+async def test_encoder_picks_best_match_per_poly():
+    """Each Poly market gets at most one Kalshi match (highest score)."""
+    poly = FakeProvider([_mkt("p1", "Will X happen?")])
+    kalshi = FakeProvider([
+        _mkt("k1", "Will X happen?", "kalshi"),
+        _mkt("k2", "X happening?", "kalshi"),
+    ])
+    # Two pairs generated, first scores higher
+    encoder = FakeEncoder(scores=[0.90, 0.60])
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+
+    assert len(state.matches) == 1
+    assert state.matches[0].confidence == 0.90
+    assert state.matches[0].kalshi_market.condition_id == "k1"
+
+
+async def test_encoder_failure_produces_no_matches():
+    """When encoder returns None, all-pairs candidates have confidence=0, so none survive."""
     poly = FakeProvider([_mkt("p1", "Will X happen?")])
     kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
     encoder = FakeEncoder(scores=None)  # simulates failure
@@ -140,14 +173,26 @@ async def test_encoder_failure_falls_back_to_token_scores():
 
     await run_scan_once(state, poly, kalshi, encoder_client=encoder)
 
-    # Token scorer gives high confidence for identical text → survives fallback
-    assert len(state.matches) >= 1
-    # Confidence should be token-based, not encoder-based
-    assert state.matches[0].confidence != 0.92
+    # generate_all_pairs sets confidence=0.0 — none pass the 0.5 threshold
+    assert len(state.matches) == 0
 
 
-async def test_no_encoder_uses_final_threshold():
-    """Without encoder, find_matches runs at match_final_threshold directly."""
+async def test_encoder_year_mismatch_filtered():
+    """Year-mismatch pairs are excluded before reaching the encoder."""
+    poly = FakeProvider([_mkt("p1", "Will BTC hit $100k by 2025?")])
+    kalshi = FakeProvider([_mkt("k1", "Bitcoin above $100k by 2026?", "kalshi")])
+    encoder = FakeEncoder(scores=[0.95])
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+
+    # Year mismatch filtered in generate_all_pairs — encoder never called
+    assert len(encoder.pairs_sent) == 0
+    assert len(state.matches) == 0
+
+
+async def test_no_encoder_uses_token_matcher():
+    """Without encoder, find_matches runs with token-based scoring."""
     poly = FakeProvider([_mkt("p1", "Will X happen?")])
     kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
     state = State(config=Config())

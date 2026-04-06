@@ -1,7 +1,7 @@
 """Tests for cross-platform market matching."""
 
 from polyarb.matching.normalize import extract_years, normalize, tokenize
-from polyarb.matching.matcher import MatchedPair, find_matches, _jaccard, _containment
+from polyarb.matching.matcher import MatchedPair, find_matches, generate_all_pairs, _jaccard, _containment
 from polyarb.models import Market, Side, Token
 
 
@@ -181,3 +181,59 @@ def test_best_match_picked_per_poly_market():
     assert len(matches) <= 1
     if matches:
         assert "Tim Walz" in matches[0].kalshi_market.question
+
+
+# ── generate_all_pairs ────────────────────────────────────────
+
+
+def test_generate_all_pairs_produces_cartesian_product():
+    poly = [_mkt("A?"), _mkt("B?")]
+    kalshi = [_mkt("X?", 0.50, "kalshi"), _mkt("Y?", 0.50, "kalshi")]
+    pairs = generate_all_pairs(poly, kalshi)
+    assert len(pairs) == 4  # 2 x 2
+    assert all(p.confidence == 0.0 for p in pairs)
+
+
+def test_generate_all_pairs_zero_token_overlap():
+    """Pairs with no shared tokens are still generated."""
+    poly = [_mkt("Will BTC hit $100k?")]
+    kalshi = [_mkt("Bitcoin above $100,000?", 0.50, "kalshi")]
+    pairs = generate_all_pairs(poly, kalshi)
+    assert len(pairs) == 1
+
+
+def test_generate_all_pairs_year_mismatch_filtered():
+    """Pairs where both mention years but none overlap are excluded."""
+    poly = [_mkt("BTC above $100k by 2025?")]
+    kalshi = [_mkt("Bitcoin above $100k by 2026?", 0.50, "kalshi")]
+    pairs = generate_all_pairs(poly, kalshi)
+    assert len(pairs) == 0
+
+
+def test_generate_all_pairs_no_years_not_filtered():
+    """Pairs where neither mentions a year are kept."""
+    poly = [_mkt("Will it rain tomorrow?")]
+    kalshi = [_mkt("Rain tomorrow?", 0.50, "kalshi")]
+    pairs = generate_all_pairs(poly, kalshi)
+    assert len(pairs) == 1
+
+
+def test_generate_all_pairs_capped_by_max_candidates():
+    """Output is limited to max_candidates, ranked by character similarity."""
+    poly = [_mkt(f"Question {i}?") for i in range(10)]
+    kalshi = [_mkt(f"Query {j}?", 0.50, "kalshi") for j in range(10)]
+    pairs = generate_all_pairs(poly, kalshi, max_candidates=5)
+    assert len(pairs) == 5
+    assert all(p.confidence == 0.0 for p in pairs)
+
+
+def test_generate_all_pairs_ranks_similar_higher():
+    """More similar pairs rank above dissimilar ones."""
+    poly = [_mkt("Will Bitcoin hit $100k?")]
+    kalshi = [
+        _mkt("Bitcoin above $100,000?", 0.50, "kalshi"),
+        _mkt("GTA VI release date?", 0.50, "kalshi"),
+    ]
+    pairs = generate_all_pairs(poly, kalshi, max_candidates=2)
+    # Bitcoin pair should be first (higher SequenceMatcher score)
+    assert "Bitcoin" in pairs[0].kalshi_market.question

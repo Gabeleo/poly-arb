@@ -189,3 +189,43 @@ def find_matches(
 
     matches.sort(key=lambda m: m.confidence, reverse=True)
     return matches
+
+
+def generate_all_pairs(
+    poly_markets: list[Market],
+    kalshi_markets: list[Market],
+    max_candidates: int = 200,
+) -> list[MatchedPair]:
+    """Generate candidate pairs for cross-encoder verification.
+
+    Computes the full cartesian product, applies the year-mismatch hard
+    filter, then ranks by cheap character-level similarity (SequenceMatcher)
+    and returns the top *max_candidates*.  SequenceMatcher works on raw
+    character sequences so it catches overlap that token-based methods miss
+    (e.g. 'BTC' vs 'Bitcoin' share the 'bt' prefix).
+    """
+    poly_norm = [normalize(m.question) for m in poly_markets]
+    kalshi_norm = [normalize(m.question) for m in kalshi_markets]
+    poly_years = [extract_years(m.question) for m in poly_markets]
+    kalshi_years = [extract_years(m.question) for m in kalshi_markets]
+
+    scored: list[tuple[float, int, int]] = []
+    for i, pm in enumerate(poly_markets):
+        py = poly_years[i]
+        pn = poly_norm[i]
+        for j, km in enumerate(kalshi_markets):
+            ky = kalshi_years[j]
+            if py and ky and not (py & ky):
+                continue
+            # Cheap character-level score for ranking (no token overlap needed)
+            score = SequenceMatcher(None, pn, kalshi_norm[j]).ratio()
+            scored.append((score, i, j))
+
+    # Take top candidates by cheap score
+    scored.sort(key=lambda t: t[0], reverse=True)
+    top = scored[:max_candidates]
+
+    return [
+        MatchedPair(poly_markets[i], kalshi_markets[j], 0.0)
+        for _, i, j in top
+    ]

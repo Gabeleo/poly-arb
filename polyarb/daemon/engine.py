@@ -11,7 +11,7 @@ from polyarb.data.base import group_events
 from polyarb.engine.multi import detect_multi
 from polyarb.engine.single import detect_single
 from polyarb.matching.encoder_client import EncoderClient
-from polyarb.matching.matcher import MatchedPair, find_matches
+from polyarb.matching.matcher import MatchedPair, find_matches, generate_all_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +31,20 @@ async def _verify_candidates(
     scores = await encoder_client.score_pairs(pairs)
 
     if scores is not None:
-        matches = [
-            MatchedPair(c.poly_market, c.kalshi_market, score)
-            for c, score in zip(candidates, scores)
-            if score >= final_threshold
-        ]
-        matches.sort(key=lambda m: m.confidence, reverse=True)
+        # Keep best Kalshi match per Poly market (1:1 mapping)
+        best: dict[str, MatchedPair] = {}
+        for c, score in zip(candidates, scores):
+            if score < final_threshold:
+                continue
+            key = c.poly_market.condition_id
+            if key not in best or score > best[key].confidence:
+                best[key] = MatchedPair(c.poly_market, c.kalshi_market, score)
+
+        matches = sorted(best.values(), key=lambda m: m.confidence, reverse=True)
         return matches
 
-    # Encoder failed — fall back to token-only scores
-    logger.warning("Encoder unavailable, using token scores")
+    # Encoder failed — fall back to token-only matches
+    logger.warning("Encoder unavailable, falling back to token matcher")
     return [c for c in candidates if c.confidence >= final_threshold]
 
 
@@ -57,17 +61,22 @@ async def run_scan_once(
 
     cfg = state.config
 
-    # Phase 1: cheap token filter (recall-optimised)
-    candidate_threshold = cfg.match_candidate_threshold if encoder_client else cfg.match_final_threshold
-    candidates = await asyncio.to_thread(
-        find_matches, poly_markets, kalshi_markets, candidate_threshold,
-    )
-
-    # Phase 2: cross-encoder verification (precision gate)
     if encoder_client is not None:
+        # Encoder available: generate all pairs (bypass token filter),
+        # let the cross-encoder do the semantic scoring
+        candidates = await asyncio.to_thread(
+            generate_all_pairs, poly_markets, kalshi_markets,
+        )
+        logger.info(
+            "Generated %d candidate pairs (%d poly x %d kalshi)",
+            len(candidates), len(poly_markets), len(kalshi_markets),
+        )
         matches = await _verify_candidates(candidates, encoder_client, cfg.match_final_threshold)
     else:
-        matches = candidates
+        # No encoder: use token-based matching only
+        matches = await asyncio.to_thread(
+            find_matches, poly_markets, kalshi_markets, cfg.match_final_threshold,
+        )
 
     all_markets = poly_markets + kalshi_markets
     single_opps = await asyncio.to_thread(detect_single, all_markets, state.config)

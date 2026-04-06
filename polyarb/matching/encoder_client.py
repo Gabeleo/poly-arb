@@ -26,7 +26,7 @@ class EncoderClient:
             self._client = client
             self._owns_client = False
         else:
-            self._client = httpx.AsyncClient(timeout=10.0)
+            self._client = httpx.AsyncClient(timeout=60.0)
             self._owns_client = True
 
     async def score_pairs(

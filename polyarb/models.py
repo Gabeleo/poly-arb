@@ -55,6 +55,7 @@ class Market:
     event_slug: str = ""
     slug: str = ""
     volume: float = 0.0
+    volume_24h: float = 0.0
     end_date: datetime | None = None
     platform: str = "polymarket"
 
@@ -84,6 +85,7 @@ class Market:
             "event_slug": self.event_slug,
             "slug": self.slug,
             "volume": self.volume,
+            "volume_24h": self.volume_24h,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "platform": self.platform,
         }

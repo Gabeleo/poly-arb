@@ -71,6 +71,7 @@ def _parse_market(raw: dict) -> Market | None:
         event_slug=event_slug,
         slug=raw.get("slug", ""),
         volume=float(raw.get("volumeNum") or raw.get("volume") or 0),
+        volume_24h=float(raw.get("volume24hr") or 0),
         end_date=_parse_dt(raw.get("endDate")),
     )
 
