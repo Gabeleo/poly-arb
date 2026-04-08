@@ -74,6 +74,33 @@ class MatchedPair:
             self.kalshi_market.no_token.best_ask,
         )
 
+    @property
+    def execution_params(self) -> dict:
+        """Structured execution parameters for both platforms.
+
+        Returns a dict with ``profit``, ``kalshi`` (ticker, side, price),
+        and ``poly`` (token_id, side, price) derived from ``best_arb``.
+        """
+        profit, kalshi_side, _, _, kalshi_price = self.best_arb
+        poly_side = "no" if kalshi_side == "yes" else "yes"
+        poly_token = (
+            self.poly_market.no_token if poly_side == "no"
+            else self.poly_market.yes_token
+        )
+        return {
+            "profit": profit,
+            "kalshi": {
+                "ticker": self.kalshi_market.condition_id,
+                "side": kalshi_side,
+                "price": kalshi_price,
+            },
+            "poly": {
+                "token_id": poly_token.token_id,
+                "side": poly_side,
+                "price": poly_token.best_ask,
+            },
+        }
+
     def to_dict(self) -> dict:
         profit, kalshi_side, kalshi_desc, poly_desc, kalshi_price = self.best_arb
         return {
