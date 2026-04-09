@@ -10,11 +10,13 @@ import dataclasses
 import logging
 from datetime import datetime, timezone
 
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.websockets import WebSocket
 
 from polyarb.config import Config
+from polyarb.observability.health import check_deep, check_liveness, check_readiness
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +100,38 @@ async def post_config(request: Request) -> JSONResponse:
         field_type = type(getattr(st.config, key))
         setattr(st.config, key, field_type(value))
     return JSONResponse(dataclasses.asdict(st.config))
+
+
+async def health_live(request: Request) -> JSONResponse:
+    """Kubernetes liveness probe — always 200."""
+    result = await check_liveness()
+    return JSONResponse(result)
+
+
+async def health_ready(request: Request) -> JSONResponse:
+    """Kubernetes readiness probe — 200 after first successful scan."""
+    state = request.app.state.daemon_state
+    ready, detail = await check_readiness(state)
+    status_code = 200 if ready else 503
+    return JSONResponse(detail, status_code=status_code)
+
+
+async def health_deep(request: Request) -> JSONResponse:
+    """Deep health check — concurrent probes to all external dependencies."""
+    state = request.app.state.daemon_state
+    healthy, detail = await check_deep(
+        state,
+        encoder_client=getattr(request.app.state, "encoder_client", None),
+        poly_provider=getattr(request.app.state, "poly_provider", None),
+        kalshi_provider=getattr(request.app.state, "kalshi_provider", None),
+    )
+    status_code = 200 if healthy else 503
+    return JSONResponse(detail, status_code=status_code)
+
+
+async def metrics_endpoint(request: Request) -> Response:
+    """Prometheus metrics endpoint — unauthenticated."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 async def execute(request: Request) -> JSONResponse:

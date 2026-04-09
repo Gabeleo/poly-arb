@@ -10,7 +10,6 @@ If median lifetime < execution latency, the thesis fails.
 
 from __future__ import annotations
 
-import sqlite3
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -137,25 +136,21 @@ def analyze_pair(
     kalshi_ticker: str,
     fees: FeeParams = FeeParams(),
     scan_interval: int = 30,
+    repo=None,
 ) -> PairLifetime:
-    """Run lifetime analysis for a single matched pair."""
-    conn = sqlite3.connect(str(db_path))
+    """Run lifetime analysis for a single matched pair.
 
-    rows = conn.execute(
-        """
-        SELECT p.scan_ts,
-               p.yes_ask, p.no_ask,
-               k.yes_ask, k.no_ask,
-               p.question, k.question
-        FROM polymarket_snapshots p
-        JOIN kalshi_snapshots k ON p.scan_ts = k.scan_ts
-        WHERE p.condition_id = ? AND k.ticker = ?
-        ORDER BY p.scan_ts
-        """,
-        (poly_cid, kalshi_ticker),
-    ).fetchall()
+    If *repo* is provided (a SnapshotRepository), uses it directly.
+    Otherwise, creates one from *db_path*.
+    """
+    if repo is None:
+        from polyarb.db.engine import create_engine
+        from polyarb.db.repositories.snapshots import SqliteSnapshotRepository
 
-    conn.close()
+        engine = create_engine(f"sqlite:///{db_path}")
+        repo = SqliteSnapshotRepository(engine)
+
+    rows = repo.get_pair_scans(poly_cid, kalshi_ticker)
 
     if not rows:
         return PairLifetime(
@@ -167,15 +162,18 @@ def analyze_pair(
             profitable_scans=0,
         )
 
-    poly_q = rows[0][5]
-    kalshi_q = rows[0][6]
+    poly_q = rows[0]["poly_question"]
+    kalshi_q = rows[0]["kalshi_question"]
 
     scans: list[tuple[str, ArbResult]] = []
     profitable_count = 0
 
-    for scan_ts, py_ask, pn_ask, ky_ask, kn_ask, _, _ in rows:
-        arb = compute_arb(py_ask, pn_ask, ky_ask, kn_ask, fees)
-        scans.append((scan_ts, arb))
+    for r in rows:
+        arb = compute_arb(
+            r["poly_yes_ask"], r["poly_no_ask"],
+            r["kalshi_yes_ask"], r["kalshi_no_ask"], fees,
+        )
+        scans.append((r["scan_ts"], arb))
         if is_profitable(arb):
             profitable_count += 1
 
@@ -197,10 +195,11 @@ def analyze_pairs(
     pairs: list[tuple[str, str]],
     fees: FeeParams = FeeParams(),
     scan_interval: int = 30,
+    repo=None,
 ) -> list[PairLifetime]:
     """Run lifetime analysis for multiple matched pairs."""
     return [
-        analyze_pair(db_path, poly_cid, kalshi_ticker, fees, scan_interval)
+        analyze_pair(db_path, poly_cid, kalshi_ticker, fees, scan_interval, repo=repo)
         for poly_cid, kalshi_ticker in pairs
     ]
 

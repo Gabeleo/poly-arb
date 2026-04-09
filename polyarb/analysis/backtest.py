@@ -14,7 +14,6 @@ Output: per-trade log, aggregate P&L, capital curve, return metrics.
 
 from __future__ import annotations
 
-import sqlite3
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -121,20 +120,27 @@ def run_backtest(
     db_path: str | Path,
     pairs: list[tuple[str, str]],
     fees: FeeParams = FeeParams(),
+    repo=None,
 ) -> BacktestResult:
     """Run the backtest over all matched pairs.
 
     Scans chronologically.  For each pair, enters on the first profitable
     scan of each arb window (consecutive profitable run).  Tracks capital
     locked until each trade's settlement date.
+
+    If *repo* is provided (a SnapshotRepository), uses it directly.
+    Otherwise, creates one from *db_path*.
     """
-    conn = sqlite3.connect(str(db_path))
+    if repo is None:
+        from polyarb.db.engine import create_engine
+        from polyarb.db.repositories.snapshots import SqliteSnapshotRepository
+
+        engine = create_engine(f"sqlite:///{db_path}")
+        repo = SqliteSnapshotRepository(engine)
+
     result = BacktestResult(fees=fees)
 
-    # Get all distinct scan timestamps (ordered)
-    all_scans = [r[0] for r in conn.execute(
-        "SELECT DISTINCT scan_ts FROM polymarket_snapshots ORDER BY scan_ts"
-    ).fetchall()]
+    all_scans = repo.get_distinct_scan_timestamps()
 
     # Track per-pair state: was the previous scan profitable?
     # True = we're inside an arb window and already entered
@@ -153,23 +159,18 @@ def run_backtest(
 
         # Evaluate each pair
         for poly_cid, kalshi_ticker in pairs:
-            row = conn.execute(
-                """
-                SELECT p.yes_ask, p.no_ask, k.yes_ask, k.no_ask,
-                       p.end_date, k.close_time
-                FROM polymarket_snapshots p
-                JOIN kalshi_snapshots k ON p.scan_ts = k.scan_ts
-                WHERE p.condition_id = ? AND k.ticker = ?
-                  AND p.scan_ts = ?
-                """,
-                (poly_cid, kalshi_ticker, scan_ts),
-            ).fetchone()
+            row = repo.get_pair_scan_at(poly_cid, kalshi_ticker, scan_ts)
 
             if row is None:
                 in_window[(poly_cid, kalshi_ticker)] = False
                 continue
 
-            py_ask, pn_ask, ky_ask, kn_ask, p_end, k_end = row
+            py_ask = row["poly_yes_ask"]
+            pn_ask = row["poly_no_ask"]
+            ky_ask = row["kalshi_yes_ask"]
+            kn_ask = row["kalshi_no_ask"]
+            p_end = row["end_date"]
+            k_end = row["close_time"]
             arb = compute_arb(py_ask, pn_ask, ky_ask, kn_ask, fees)
 
             pair_key = (poly_cid, kalshi_ticker)
@@ -202,7 +203,6 @@ def run_backtest(
                 # Window closed
                 in_window[pair_key] = False
 
-    conn.close()
     return result
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 
 from polyarb.daemon.state import State
 from polyarb.data.base import group_events
@@ -13,8 +14,16 @@ from polyarb.engine.single import detect_single
 from polyarb.matching.encoder_client import EncoderClient
 from polyarb.matching.matcher import MatchedPair, find_matches, generate_all_pairs
 from polyarb.models import Market
+from polyarb.observability import metrics
+from polyarb.observability.context import new_scan_id
 
 logger = logging.getLogger(__name__)
+
+
+def _scan_timestamp() -> str:
+    """UTC timestamp for the current scan cycle."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 # Timeouts and circuit breaker defaults
 FETCH_TIMEOUT = 30.0  # seconds per provider fetch
@@ -33,6 +42,7 @@ class _CircuitBreaker:
         if self._failures > 0:
             logger.info("Provider %s recovered after %d failures", self.name, self._failures)
         self._failures = 0
+        metrics.circuit_breaker_state.labels(provider=self.name).set(0)
 
     def record_failure(self, exc: Exception) -> None:
         self._failures += 1
@@ -40,6 +50,9 @@ class _CircuitBreaker:
             "Provider %s failed (%d consecutive): %s",
             self.name, self._failures, exc,
         )
+        metrics.fetch_errors.labels(provider=self.name).inc()
+        if self.is_open:
+            metrics.circuit_breaker_state.labels(provider=self.name).set(1)
 
     @property
     def is_open(self) -> bool:
@@ -66,7 +79,8 @@ async def _verify_candidates(
     pairs = [
         (c.poly_market.question, c.kalshi_market.question) for c in candidates
     ]
-    scores = await encoder_client.score_pairs(pairs)
+    with metrics.encoder_duration.time():
+        scores = await encoder_client.score_pairs(pairs)
 
     if scores is not None:
         # Keep best Kalshi match per Poly market (1:1 mapping)
@@ -83,6 +97,7 @@ async def _verify_candidates(
 
     # Encoder failed — fall back to token-only matches
     logger.warning("Encoder unavailable, falling back to token matcher")
+    metrics.encoder_errors.inc()
     return [c for c in candidates if c.confidence >= final_threshold]
 
 
@@ -105,9 +120,11 @@ async def _fetch_markets(
             logger.info("Poly provider circuit open, backing off %.0fs", poly_cb.backoff_delay)
             return
         try:
-            poly_markets = await asyncio.wait_for(
-                poly.get_active_markets(), timeout=FETCH_TIMEOUT,
-            )
+            with metrics.fetch_duration.labels(provider="poly").time():
+                poly_markets = await asyncio.wait_for(
+                    poly.get_active_markets(), timeout=FETCH_TIMEOUT,
+                )
+            metrics.markets_fetched.labels(provider="poly").set(len(poly_markets))
             poly_cb.record_success()
         except (asyncio.TimeoutError, Exception) as exc:
             poly_cb.record_failure(exc)
@@ -118,9 +135,11 @@ async def _fetch_markets(
             logger.info("Kalshi provider circuit open, backing off %.0fs", kalshi_cb.backoff_delay)
             return
         try:
-            kalshi_markets = await asyncio.wait_for(
-                kalshi.get_active_markets(), timeout=FETCH_TIMEOUT,
-            )
+            with metrics.fetch_duration.labels(provider="kalshi").time():
+                kalshi_markets = await asyncio.wait_for(
+                    kalshi.get_active_markets(), timeout=FETCH_TIMEOUT,
+                )
+            metrics.markets_fetched.labels(provider="kalshi").set(len(kalshi_markets))
             kalshi_cb.record_success()
         except (asyncio.TimeoutError, Exception) as exc:
             kalshi_cb.record_failure(exc)
@@ -180,10 +199,16 @@ async def _publish_results(
     matches: list[MatchedPair],
     all_opps,
     approval_manager,
+    match_repo=None,
+    scan_ts: str | None = None,
+    scan_id: str | None = None,
 ) -> None:
-    """Update state, broadcast to WS clients, and notify approval manager."""
+    """Update state, broadcast to WS clients, notify approval manager, and record matches."""
     new_matches = state.update_matches(matches)
     new_opps = state.update_opportunities(all_opps)
+
+    metrics.matches_found.set(len(matches))
+    metrics.opportunities_found.set(len(all_opps))
 
     if new_matches:
         await state.broadcast({
@@ -202,6 +227,32 @@ async def _publish_results(
         if new_matches:
             await approval_manager.on_new_matches(new_matches)
 
+    # Record match snapshots to database
+    if match_repo is not None and matches:
+        match_dicts = []
+        for m in matches:
+            match_dicts.append({
+                "poly_condition_id": m.poly_market.condition_id,
+                "kalshi_ticker": m.kalshi_market.condition_id,
+                "poly_question": m.poly_market.question,
+                "kalshi_question": m.kalshi_market.question,
+                "confidence": m.confidence,
+                "poly_yes_bid": m.poly_market.yes_token.best_bid,
+                "poly_yes_ask": m.poly_market.yes_token.best_ask,
+                "poly_no_bid": m.poly_market.no_token.best_bid,
+                "poly_no_ask": m.poly_market.no_token.best_ask,
+                "kalshi_yes_bid": m.kalshi_market.yes_token.best_bid,
+                "kalshi_yes_ask": m.kalshi_market.yes_token.best_ask,
+                "kalshi_no_bid": m.kalshi_market.no_token.best_bid,
+                "kalshi_no_ask": m.kalshi_market.no_token.best_ask,
+            })
+        try:
+            await asyncio.to_thread(
+                match_repo.insert_matches, scan_ts or "", scan_id or "", match_dicts,
+            )
+        except Exception:
+            logger.exception("Failed to record match snapshots")
+
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -212,23 +263,37 @@ async def run_scan_once(
     poly_cb: _CircuitBreaker | None = None,
     kalshi_cb: _CircuitBreaker | None = None,
     biencoder=None,
+    match_repo=None,
 ) -> None:
     """Fetch from both providers, detect matches and opportunities, update state."""
     poly_cb = poly_cb or _CircuitBreaker("poly")
     kalshi_cb = kalshi_cb or _CircuitBreaker("kalshi")
 
-    poly_markets, kalshi_markets = await _fetch_markets(poly, kalshi, poly_cb, kalshi_cb)
+    sid = new_scan_id()
+    scan_ts = _scan_timestamp()
+    logger.info("Starting scan %s", sid)
 
-    cfg = state.config
-    matches = await _match_markets(
-        poly_markets, kalshi_markets, encoder_client, cfg.match_final_threshold,
-        biencoder=biencoder,
-        candidate_threshold=cfg.match_candidate_threshold,
-    )
+    with metrics.scan_duration.time():
+        try:
+            poly_markets, kalshi_markets = await _fetch_markets(poly, kalshi, poly_cb, kalshi_cb)
 
-    all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
+            cfg = state.config
+            matches = await _match_markets(
+                poly_markets, kalshi_markets, encoder_client, cfg.match_final_threshold,
+                biencoder=biencoder,
+                candidate_threshold=cfg.match_candidate_threshold,
+            )
 
-    await _publish_results(state, matches, all_opps, approval_manager)
+            all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
+
+            await _publish_results(
+                state, matches, all_opps, approval_manager,
+                match_repo=match_repo, scan_ts=scan_ts, scan_id=sid,
+            )
+            metrics.scan_total.labels(status="success").inc()
+        except Exception:
+            metrics.scan_total.labels(status="error").inc()
+            raise
 
 
 async def run_scan_loop(
@@ -236,6 +301,7 @@ async def run_scan_loop(
     encoder_client: EncoderClient | None = None,
     stop_event: asyncio.Event | None = None,
     biencoder=None,
+    match_repo=None,
 ) -> None:
     """Continuous scan loop with graceful shutdown support.
 
@@ -255,6 +321,7 @@ async def run_scan_loop(
             await run_scan_once(
                 state, poly, kalshi, approval_manager, encoder_client,
                 poly_cb, kalshi_cb, biencoder=biencoder,
+                match_repo=match_repo,
             )
 
             # Hourly digest of top single-platform opps

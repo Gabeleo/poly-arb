@@ -1,12 +1,16 @@
-"""SQLite storage for market snapshots."""
+"""SQLite storage for market snapshots.
+
+Thin wrapper around SqliteSnapshotRepository — preserves the original
+public interface so recorder.py and existing tests need no changes.
+"""
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 from polyarb.models import Market
 
+# Kept for backward compat (test_backtest.py imports this)
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS polymarket_snapshots (
     id            INTEGER PRIMARY KEY,
@@ -46,89 +50,70 @@ CREATE INDEX IF NOT EXISTS idx_poly_scan  ON polymarket_snapshots(scan_ts);
 CREATE INDEX IF NOT EXISTS idx_kalshi_scan ON kalshi_snapshots(scan_ts);
 """
 
-# Polymarket volume is in dollars; Kalshi volume_fp is in contracts (~$0.01–$0.99 each).
-# At typical prices the thresholds are roughly comparable.  Separate per-platform
-# thresholds can be added once recorded data reveals the actual distributions.
+# Volume filter — business logic, not data access.
 MIN_VOLUME = 10_000
-
-_POLY_COLUMNS = (
-    "scan_ts", "condition_id", "question", "event_slug",
-    "yes_bid", "yes_ask", "no_bid", "no_ask",
-    "volume", "volume_24h", "end_date",
-)
-
-_KALSHI_COLUMNS = (
-    "scan_ts", "ticker", "question", "event_ticker",
-    "yes_bid", "yes_ask", "no_bid", "no_ask",
-    "volume", "volume_24h", "close_time",
-)
 
 
 class RecorderDB:
-    def __init__(self, path: str | Path = "snapshots.db") -> None:
-        self._path = str(path)
-        self._conn = sqlite3.connect(self._path)
-        self._conn.executescript(SCHEMA)
+    def __init__(self, path: str | Path = "polyarb.db") -> None:
+        from polyarb.db.engine import create_engine
+        from polyarb.db.models import metadata
+        from polyarb.db.repositories.snapshots import SqliteSnapshotRepository
+
+        url = f"sqlite:///{path}"
+        self._engine = create_engine(url)
+        metadata.create_all(self._engine)
+        self._repo = SqliteSnapshotRepository(self._engine)
 
     @staticmethod
     def _passes_filter(m: Market) -> bool:
         return m.volume >= MIN_VOLUME and m.volume_24h > 0
 
-    def _insert(self, table: str, columns: tuple[str, ...], rows: list[tuple]) -> int:
-        """Insert rows, returning the number actually written (ignoring dupes)."""
-        if not rows:
-            return 0
-        placeholders = ", ".join("?" for _ in columns)
-        col_names = ", ".join(columns)
-        before = self._conn.total_changes
-        self._conn.executemany(
-            f"INSERT OR IGNORE INTO {table} ({col_names}) VALUES ({placeholders})",
-            rows,
-        )
-        self._conn.commit()
-        return self._conn.total_changes - before
+    @staticmethod
+    def _poly_dict(scan_ts: str, m: Market) -> dict:
+        return {
+            "scan_ts": scan_ts,
+            "condition_id": m.condition_id,
+            "question": m.question,
+            "event_slug": m.event_slug,
+            "yes_bid": m.yes_token.best_bid,
+            "yes_ask": m.yes_token.best_ask,
+            "no_bid": m.no_token.best_bid,
+            "no_ask": m.no_token.best_ask,
+            "volume": m.volume,
+            "volume_24h": m.volume_24h,
+            "end_date": m.end_date.isoformat() if m.end_date else None,
+        }
 
     @staticmethod
-    def _market_row(scan_ts: str, m: Market) -> tuple:
-        return (
-            scan_ts,
-            m.condition_id,
-            m.question,
-            m.event_slug,
-            m.yes_token.best_bid,
-            m.yes_token.best_ask,
-            m.no_token.best_bid,
-            m.no_token.best_ask,
-            m.volume,
-            m.volume_24h,
-            m.end_date.isoformat() if m.end_date else None,
-        )
+    def _kalshi_dict(scan_ts: str, m: Market) -> dict:
+        return {
+            "scan_ts": scan_ts,
+            "ticker": m.condition_id,
+            "question": m.question,
+            "event_ticker": m.event_slug,
+            "yes_bid": m.yes_token.best_bid,
+            "yes_ask": m.yes_token.best_ask,
+            "no_bid": m.no_token.best_bid,
+            "no_ask": m.no_token.best_ask,
+            "volume": m.volume,
+            "volume_24h": m.volume_24h,
+            "close_time": m.end_date.isoformat() if m.end_date else None,
+        }
 
     def insert_polymarket(self, scan_ts: str, markets: list[Market]) -> int:
-        rows = [self._market_row(scan_ts, m) for m in markets if self._passes_filter(m)]
-        return self._insert("polymarket_snapshots", _POLY_COLUMNS, rows)
+        rows = [self._poly_dict(scan_ts, m) for m in markets if self._passes_filter(m)]
+        return self._repo.insert_polymarket(scan_ts, rows)
 
     def insert_kalshi(self, scan_ts: str, markets: list[Market]) -> int:
-        rows = [self._market_row(scan_ts, m) for m in markets if self._passes_filter(m)]
-        return self._insert("kalshi_snapshots", _KALSHI_COLUMNS, rows)
+        rows = [self._kalshi_dict(scan_ts, m) for m in markets if self._passes_filter(m)]
+        return self._repo.insert_kalshi(scan_ts, rows)
 
     def scan_count(self) -> dict[str, int]:
-        poly = self._conn.execute(
-            "SELECT COUNT(DISTINCT scan_ts) FROM polymarket_snapshots"
-        ).fetchone()[0]
-        kalshi = self._conn.execute(
-            "SELECT COUNT(DISTINCT scan_ts) FROM kalshi_snapshots"
-        ).fetchone()[0]
-        return {"polymarket": poly, "kalshi": kalshi}
+        return self._repo.scan_count()
 
     def market_count(self) -> dict[str, int]:
-        poly = self._conn.execute(
-            "SELECT COUNT(*) FROM polymarket_snapshots"
-        ).fetchone()[0]
-        kalshi = self._conn.execute(
-            "SELECT COUNT(*) FROM kalshi_snapshots"
-        ).fetchone()[0]
-        return {"polymarket": poly, "kalshi": kalshi}
+        return self._repo.market_count()
 
     def close(self) -> None:
-        self._conn.close()
+        self._engine.dispose()

@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route, WebSocketRoute
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket
@@ -17,8 +18,12 @@ from polyarb.daemon.routes import (
     execute,
     get_config,
     health,
+    health_deep,
+    health_live,
+    health_ready,
     match_detail,
     matches,
+    metrics_endpoint,
     opportunities,
     post_config,
     status,
@@ -26,6 +31,7 @@ from polyarb.daemon.routes import (
     ws_endpoint,
 )
 from polyarb.daemon.state import State
+from polyarb.observability.middleware import MetricsMiddleware, RequestIdMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +87,18 @@ def create_app(
     approval_manager: Any = None,
     telegram_bot: Any = None,
     api_key: str | None = None,
+    encoder_client: Any = None,
+    poly_provider: Any = None,
+    kalshi_provider: Any = None,
 ) -> Starlette:
     """Build and return a Starlette application wired to *state*."""
 
     routes = [
         Route("/health", health, methods=["GET"]),
+        Route("/health/live", health_live, methods=["GET"]),
+        Route("/health/ready", health_ready, methods=["GET"]),
+        Route("/health/deep", health_deep, methods=["GET"]),
+        Route("/metrics", metrics_endpoint, methods=["GET"]),
         Route("/status", status, methods=["GET"]),
         Route("/matches", matches, methods=["GET"]),
         Route("/matches/{id:int}", match_detail, methods=["GET"]),
@@ -101,6 +114,8 @@ def create_app(
     if api_key:
         middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))
         logger.info("API key authentication enabled")
+    middleware.append(Middleware(MetricsMiddleware))
+    middleware.append(Middleware(RequestIdMiddleware))
 
     app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
 
@@ -109,5 +124,8 @@ def create_app(
     app.state.kalshi_client = kalshi_client
     app.state.approval_manager = approval_manager
     app.state.telegram_bot = telegram_bot
+    app.state.encoder_client = encoder_client
+    app.state.poly_provider = poly_provider
+    app.state.kalshi_provider = kalshi_provider
 
     return app

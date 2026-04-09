@@ -16,6 +16,7 @@ from polyarb.daemon.server import create_app
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 from polyarb.data.async_live import AsyncLiveDataProvider
+from polyarb.observability.logging import configure_logging
 
 logger = logging.getLogger("polyarb.daemon")
 
@@ -27,11 +28,36 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--interval", type=float, default=5.0, help="scan interval in seconds (default 5.0)"
     )
+    p.add_argument(
+        "--log-json", action="store_true", default=True, help="emit JSON logs (default)"
+    )
+    p.add_argument(
+        "--no-log-json", dest="log_json", action="store_false", help="emit human-readable logs"
+    )
+    p.add_argument(
+        "--log-level", default="INFO", help="log level (default INFO)"
+    )
     return p.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
+
+    # Configure structured logging before anything else
+    log_json = os.environ.get("LOG_FORMAT", "json") == "json" and args.log_json
+    log_level = os.environ.get("LOG_LEVEL", args.log_level)
+    configure_logging(json_output=log_json, level=log_level)
+
+    # Database setup
+    from polyarb.db.engine import create_engine as create_db_engine, get_database_url
+    from polyarb.db.models import metadata
+    from polyarb.db.repositories.matches import SqliteMatchSnapshotRepository
+
+    db_url = get_database_url()
+    db_engine = create_db_engine(db_url)
+    metadata.create_all(db_engine)
+    match_repo = SqliteMatchSnapshotRepository(db_engine)
+    logger.info("Database: %s", db_url)
 
     config = Config(scan_interval=args.interval)
     state = State(config=config)
@@ -103,6 +129,7 @@ def main() -> None:
             run_scan_loop(
                 state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
                 stop_event=stop_event, biencoder=biencoder,
+                match_repo=match_repo,
             )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
@@ -153,9 +180,12 @@ def main() -> None:
         approval_manager=approval_manager,
         telegram_bot=telegram_bot,
         api_key=api_key,
+        encoder_client=encoder_client,
+        poly_provider=poly,
+        kalshi_provider=kalshi,
     )
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning", log_config=None)
 
 
 if __name__ == "__main__":
