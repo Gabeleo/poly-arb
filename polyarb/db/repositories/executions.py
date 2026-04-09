@@ -9,6 +9,7 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.engine import Engine
 
 from polyarb.db.models import execution_legs, executions
+from polyarb.execution.state_machine import validate_transition
 
 
 def _now() -> str:
@@ -57,6 +58,13 @@ class SqliteExecutionRepository:
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
+
+    @staticmethod
+    def _get_leg_status(conn, row_id: int) -> str:
+        """Read current leg status within an open connection."""
+        return conn.execute(
+            select(execution_legs.c.status).where(execution_legs.c.id == row_id)
+        ).scalar_one()
 
     def record_execution(
         self,
@@ -123,6 +131,8 @@ class SqliteExecutionRepository:
 
     def mark_sent(self, row_id: int) -> None:
         with self._engine.begin() as conn:
+            current = self._get_leg_status(conn, row_id)
+            validate_transition(current, "sent")
             conn.execute(
                 update(execution_legs)
                 .where(execution_legs.c.id == row_id)
@@ -138,6 +148,8 @@ class SqliteExecutionRepository:
         error: str | None = None,
     ) -> None:
         with self._engine.begin() as conn:
+            current = self._get_leg_status(conn, row_id)
+            validate_transition(current, status)
             conn.execute(
                 update(execution_legs)
                 .where(execution_legs.c.id == row_id)
@@ -152,6 +164,8 @@ class SqliteExecutionRepository:
 
     def record_cancel(self, row_id: int, cancel_status: str) -> None:
         with self._engine.begin() as conn:
+            current = self._get_leg_status(conn, row_id)
+            validate_transition(current, cancel_status)
             conn.execute(
                 update(execution_legs)
                 .where(execution_legs.c.id == row_id)
@@ -183,6 +197,8 @@ class SqliteExecutionRepository:
 
     def mark_orphaned(self, row_id: int) -> None:
         with self._engine.begin() as conn:
+            current = self._get_leg_status(conn, row_id)
+            validate_transition(current, "orphaned")
             conn.execute(
                 update(execution_legs)
                 .where(execution_legs.c.id == row_id)
