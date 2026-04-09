@@ -1,9 +1,9 @@
-"""Tests for Telegram webhook handler in polyarb.daemon.server."""
+"""Tests for Telegram webhook handler in polyarb API."""
 
 from starlette.testclient import TestClient
 
 from polyarb.config import Config
-from polyarb.daemon.server import create_app
+from polyarb.api.app import create_app
 from polyarb.daemon.state import State
 
 

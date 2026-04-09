@@ -26,7 +26,7 @@ def engine():
 
 
 def test_all_tables_in_metadata():
-    """metadata.tables contains all 5 tables."""
+    """metadata.tables contains all 6 tables."""
     names = set(metadata.tables.keys())
     assert names == {
         "polymarket_snapshots",
@@ -34,6 +34,7 @@ def test_all_tables_in_metadata():
         "executions",
         "execution_legs",
         "match_snapshots",
+        "audit_log",
     }
 
 

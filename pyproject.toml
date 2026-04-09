@@ -11,6 +11,7 @@ dependencies = [
     "prometheus-client>=0.20",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    "pydantic>=2.5",
 ]
 
 [project.optional-dependencies]
