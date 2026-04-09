@@ -273,21 +273,13 @@ class SqliteRiskDataProvider:
         return float(result)
 
     def get_daily_pnl(self) -> float:
+        from datetime import timedelta
+
         from sqlalchemy import func, select
 
         from polyarb.db.models import executions
 
-        cutoff = (
-            datetime.now(UTC)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "")
-        )
-        # Rough 24h window: subtract a day from the ISO string
-        from datetime import timedelta
-
-        cutoff_dt = datetime.now(UTC) - timedelta(hours=24)
-        cutoff_str = cutoff_dt.isoformat()
+        cutoff_str = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
 
         with self._engine.connect() as conn:
             result = conn.execute(
