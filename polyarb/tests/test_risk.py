@@ -85,17 +85,23 @@ class TestCheckPositionLimit:
 class TestCheckExposureLimit:
     def test_passes_under_limit(self):
         # 10 contracts * $0.50 = $5 + $100 existing = $105 < $500
-        result = check_exposure_limit(_request(size=10, price=0.50), _limits(max_total_exposure=500), 100.0)
+        result = check_exposure_limit(
+            _request(size=10, price=0.50), _limits(max_total_exposure=500), 100.0
+        )
         assert result.passed
 
     def test_fails_over_limit(self):
         # 10 * $0.50 = $5 + $496 = $501 > $500
-        result = check_exposure_limit(_request(size=10, price=0.50), _limits(max_total_exposure=500), 496.0)
+        result = check_exposure_limit(
+            _request(size=10, price=0.50), _limits(max_total_exposure=500), 496.0
+        )
         assert not result.passed
         assert "501.00" in result.reason
 
     def test_passes_exactly_at_limit(self):
-        result = check_exposure_limit(_request(size=10, price=0.50), _limits(max_total_exposure=500), 495.0)
+        result = check_exposure_limit(
+            _request(size=10, price=0.50), _limits(max_total_exposure=500), 495.0
+        )
         assert result.passed
 
 

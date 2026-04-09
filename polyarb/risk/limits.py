@@ -92,10 +92,7 @@ def check_exposure_limit(
         return RiskCheckResult(
             passed=False,
             limit_name="max_total_exposure",
-            reason=(
-                f"Exposure would be ${projected:.2f} "
-                f"(limit ${limits.max_total_exposure:.2f})"
-            ),
+            reason=(f"Exposure would be ${projected:.2f} (limit ${limits.max_total_exposure:.2f})"),
         )
     return RiskCheckResult(passed=True, limit_name="max_total_exposure")
 
@@ -113,10 +110,7 @@ def check_daily_loss_limit(
         return RiskCheckResult(
             passed=False,
             limit_name="max_daily_loss",
-            reason=(
-                f"Daily loss is ${abs(daily_loss):.2f} "
-                f"(limit ${limits.max_daily_loss:.2f})"
-            ),
+            reason=(f"Daily loss is ${abs(daily_loss):.2f} (limit ${limits.max_daily_loss:.2f})"),
         )
     return RiskCheckResult(passed=True, limit_name="max_daily_loss")
 
@@ -130,10 +124,7 @@ def check_concurrent_order_limit(
         return RiskCheckResult(
             passed=False,
             limit_name="max_concurrent_orders",
-            reason=(
-                f"{concurrent_orders} orders in-flight "
-                f"(limit {limits.max_concurrent_orders})"
-            ),
+            reason=(f"{concurrent_orders} orders in-flight (limit {limits.max_concurrent_orders})"),
         )
     return RiskCheckResult(passed=True, limit_name="max_concurrent_orders")
 
@@ -148,8 +139,7 @@ def check_order_size_limit(
             passed=False,
             limit_name="max_single_order_size",
             reason=(
-                f"Order size {request.size:.0f} contracts "
-                f"(limit {limits.max_single_order_size})"
+                f"Order size {request.size:.0f} contracts (limit {limits.max_single_order_size})"
             ),
         )
     return RiskCheckResult(passed=True, limit_name="max_single_order_size")

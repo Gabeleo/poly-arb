@@ -170,8 +170,7 @@ class RiskEngine:
                 "size": request.size,
                 "price": request.price,
                 "failed_checks": [
-                    {"limit": c.limit_name, "reason": c.reason}
-                    for c in verdict.failed_checks
+                    {"limit": c.limit_name, "reason": c.reason} for c in verdict.failed_checks
                 ],
             }
         )
@@ -267,8 +266,9 @@ class SqliteRiskDataProvider:
 
         with self._engine.connect() as conn:
             result = conn.execute(
-                select(func.coalesce(func.sum(positions.c.quantity * positions.c.avg_price), 0.0))
-                .where(positions.c.closed_at.is_(None))
+                select(
+                    func.coalesce(func.sum(positions.c.quantity * positions.c.avg_price), 0.0)
+                ).where(positions.c.closed_at.is_(None))
             ).scalar()
         return float(result)
 
