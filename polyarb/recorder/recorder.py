@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from polyarb.data.base import AsyncDataProvider
+from polyarb.observability import metrics
 from polyarb.recorder.db import RecorderDB
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ async def record_once(
     poly: AsyncDataProvider,
     kalshi: AsyncDataProvider,
     db: RecorderDB,
+    db_path: str | Path = DEFAULT_DB_PATH,
 ) -> dict[str, str | int]:
     """Run a single scan cycle: fetch both platforms, filter, store."""
     scan_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -44,6 +46,10 @@ async def record_once(
 
     poly_count = db.insert_polymarket(scan_ts, poly_markets)
     kalshi_count = db.insert_kalshi(scan_ts, kalshi_markets)
+
+    db_file = Path(db_path)
+    if db_file.exists():
+        metrics.db_size_bytes.labels(database="snapshots").set(db_file.stat().st_size)
 
     return {"scan_ts": scan_ts, "polymarket": poly_count, "kalshi": kalshi_count}
 
@@ -81,7 +87,7 @@ async def run_recorder(
     try:
         while not stop.is_set():
             t0 = loop.time()
-            result = await record_once(poly, kalshi, db)
+            result = await record_once(poly, kalshi, db, db_path=db_path)
             log.info(
                 "scan %s — poly=%d kalshi=%d",
                 result["scan_ts"],

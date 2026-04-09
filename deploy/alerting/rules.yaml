@@ -1,0 +1,105 @@
+groups:
+  - name: polyarb-critical
+    rules:
+      - alert: PolyarbScanStale
+        expr: increase(polyarb_scan_total{status="success"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: No successful scan in 5 minutes
+          description: >-
+            The daemon has not completed a successful scan cycle in over
+            5 minutes. The scan loop may be stuck or the process may have
+            crashed.
+
+      - alert: PolyarbProviderDown
+        expr: polyarb_circuit_breaker_state == 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provider {{ $labels.provider }} circuit breaker open > 10m"
+          description: >-
+            Circuit breaker for {{ $labels.provider }} has been open for
+            more than 10 minutes. The provider API may be down or
+            returning persistent errors.
+
+      - alert: PolyarbEncoderDown
+        expr: >-
+          rate(polyarb_encoder_errors_total[5m])
+          / rate(polyarb_encoder_duration_seconds_count[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Encoder error rate exceeds 50%
+          description: >-
+            More than half of cross-encoder scoring requests have failed
+            over the last 5 minutes. Matching quality is degraded and
+            the system is falling back to token-only matching.
+
+      - alert: PolyarbExecutionFailure
+        expr: increase(polyarb_execution_total{status="failed"}[1m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Execution failure detected
+          description: >-
+            A trade execution attempt failed. Check logs for details on
+            which leg failed and whether an unwind was attempted.
+
+      - alert: PolyarbOrphanedLeg
+        expr: polyarb_orphaned_legs > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} orphaned execution leg(s) detected"
+          description: >-
+            One or more execution legs are stuck in 'sent' status without
+            a fill or cancellation confirmation. Manual intervention may
+            be required to reconcile positions.
+
+  - name: polyarb-warning
+    rules:
+      - alert: PolyarbHighScanLatency
+        expr: >-
+          histogram_quantile(0.99,
+            rate(polyarb_scan_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: p99 scan duration exceeds 30s
+          description: >-
+            The 99th-percentile scan cycle duration has been above 30
+            seconds for 5 minutes. Provider APIs may be slow or the
+            matching pipeline is overloaded.
+
+      - alert: PolyarbMatchCountDrop
+        expr: >-
+          (polyarb_matches_found
+            - polyarb_matches_found offset 5m)
+          / polyarb_matches_found offset 5m < -0.5
+          and polyarb_matches_found offset 5m > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Match count dropped > 50% between scans
+          description: >-
+            Cross-platform match count fell by more than half compared
+            to 5 minutes ago. This may indicate a provider outage,
+            encoder failure, or a large batch of market expirations.
+
+      - alert: PolyarbLowDiskSpace
+        expr: polyarb_db_size_bytes{database="snapshots"} > 4.5e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Snapshots database approaching 5 GB
+          description: >-
+            The SQLite snapshots database has exceeded 4.5 GB. Consider
+            pruning old scan data or migrating to PostgreSQL before the
+            volume limit is reached.

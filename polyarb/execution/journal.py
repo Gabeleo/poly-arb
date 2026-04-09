@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from polyarb.observability import metrics
+
 
 class ExecutionJournal:
     """Durable log of every execution attempt and its legs."""
@@ -71,6 +73,7 @@ class ExecutionJournal:
 
     def mark_sent(self, row_id: int) -> None:
         self._repo.mark_sent(row_id)
+        metrics.orphaned_legs.set(len(self._repo.get_orphans()))
 
     def record_result(
         self,
@@ -81,12 +84,15 @@ class ExecutionJournal:
         error: str | None = None,
     ) -> None:
         self._repo.record_result(row_id, order_id, status, fill_qty, error)
+        metrics.orphaned_legs.set(len(self._repo.get_orphans()))
 
     def record_cancel(self, row_id: int, cancel_status: str) -> None:
         self._repo.record_cancel(row_id, cancel_status)
 
     def get_orphans(self) -> list[dict]:
-        return self._repo.get_orphans()
+        orphans = self._repo.get_orphans()
+        metrics.orphaned_legs.set(len(orphans))
+        return orphans
 
     def count_by_status(self, status: str) -> int:
         return self._repo.count_by_status(status)
