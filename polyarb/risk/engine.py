@@ -240,37 +240,23 @@ class InMemoryRiskEventRecorder:
 
 
 class SqliteRiskDataProvider:
-    """Queries positions and execution data from SQLite via SQLAlchemy."""
+    """Queries positions and execution data from SQLite via SQLAlchemy.
+
+    Delegates position queries to ``SqlitePositionRepository`` and
+    keeps only execution-specific queries inline.
+    """
 
     def __init__(self, engine) -> None:
+        from polyarb.db.repositories.positions import SqlitePositionRepository
+
         self._engine = engine
+        self._positions = SqlitePositionRepository(engine)
 
     def get_position_size(self, platform: str, ticker: str) -> float:
-        from sqlalchemy import select
-
-        from polyarb.db.models import positions
-
-        with self._engine.connect() as conn:
-            row = conn.execute(
-                select(positions.c.quantity)
-                .where(positions.c.platform == platform)
-                .where(positions.c.ticker == ticker)
-                .where(positions.c.closed_at.is_(None))
-            ).scalar()
-        return float(row) if row is not None else 0.0
+        return self._positions.get_position_size(platform, ticker)
 
     def get_total_exposure(self) -> float:
-        from sqlalchemy import func, select
-
-        from polyarb.db.models import positions
-
-        with self._engine.connect() as conn:
-            result = conn.execute(
-                select(
-                    func.coalesce(func.sum(positions.c.quantity * positions.c.avg_price), 0.0)
-                ).where(positions.c.closed_at.is_(None))
-            ).scalar()
-        return float(result)
+        return self._positions.get_total_exposure()
 
     def get_daily_pnl(self) -> float:
         from datetime import timedelta
