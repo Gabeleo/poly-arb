@@ -17,56 +17,56 @@ from polyarb.api.schemas.responses import (
 
 
 def test_config_update_valid_partial():
-    m = ConfigUpdate(min_profit=0.02, scan_interval=3.0)
+    m = ConfigUpdate(min_profit=0.02, scan_interval=3.0)  # type: ignore[call-arg]
     assert m.min_profit == 0.02
     assert m.scan_interval == 3.0
     assert m.max_prob is None
 
 
 def test_config_update_all_none():
-    m = ConfigUpdate()
+    m = ConfigUpdate()  # type: ignore[call-arg]
     dumped = m.model_dump(exclude_none=True)
     assert dumped == {}
 
 
 def test_config_update_rejects_unknown_fields():
     with pytest.raises(ValidationError):
-        ConfigUpdate(bogus_key=42)
+        ConfigUpdate(bogus_key=42)  # type: ignore[call-arg]
 
 
 def test_config_update_rejects_negative_min_profit():
     with pytest.raises(ValidationError):
-        ConfigUpdate(min_profit=-0.01)
+        ConfigUpdate(min_profit=-0.01)  # type: ignore[call-arg]
 
 
 def test_config_update_allows_zero_min_profit():
-    m = ConfigUpdate(min_profit=0.0)
+    m = ConfigUpdate(min_profit=0.0)  # type: ignore[call-arg]
     assert m.min_profit == 0.0
 
 
 def test_config_update_rejects_max_prob_over_1():
     with pytest.raises(ValidationError):
-        ConfigUpdate(max_prob=1.5)
+        ConfigUpdate(max_prob=1.5)  # type: ignore[call-arg]
 
 
 def test_config_update_rejects_zero_scan_interval():
     with pytest.raises(ValidationError):
-        ConfigUpdate(scan_interval=0)
+        ConfigUpdate(scan_interval=0)  # type: ignore[call-arg]
 
 
 def test_config_update_rejects_negative_bankroll():
     with pytest.raises(ValidationError):
-        ConfigUpdate(bankroll=-1.0)
+        ConfigUpdate(bankroll=-1.0)  # type: ignore[call-arg]
 
 
 def test_config_update_coerces_string():
     """Pydantic v2 coerces compatible types."""
-    m = ConfigUpdate(min_profit=0.02)
+    m = ConfigUpdate(min_profit=0.02)  # type: ignore[call-arg]
     assert isinstance(m.min_profit, float)
 
 
 def test_config_update_model_dump():
-    m = ConfigUpdate(min_profit=0.02, order_size=5.0)
+    m = ConfigUpdate(min_profit=0.02, order_size=5.0)  # type: ignore[call-arg]
     d = m.model_dump(exclude_none=True)
     assert d == {"min_profit": 0.02, "order_size": 5.0}
 

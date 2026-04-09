@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from polyarb.observability import metrics
 from polyarb.observability.context import new_request_id
@@ -24,7 +24,7 @@ class RequestIdMiddleware:
 
         rid = new_request_id()
 
-        async def send_wrapper(message: dict) -> None:
+        async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-request-id", rid.encode()))
@@ -52,7 +52,7 @@ class MetricsMiddleware:
         start = time.monotonic()
         status_code = 500
 
-        async def send_wrapper(message: dict) -> None:
+        async def send_wrapper(message: Message) -> None:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]

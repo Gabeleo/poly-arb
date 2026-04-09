@@ -33,7 +33,7 @@ async def record_once(
     poly: AsyncDataProvider,
     kalshi: AsyncDataProvider,
     db: RecorderDB,
-) -> dict[str, int]:
+) -> dict[str, str | int]:
     """Run a single scan cycle: fetch both platforms, filter, store."""
     scan_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 

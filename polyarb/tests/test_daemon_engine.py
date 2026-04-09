@@ -111,7 +111,7 @@ async def test_encoder_verifies_candidates():
     encoder = FakeEncoder(scores=[0.92])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     assert len(state.matches) == 1
     assert state.matches[0].confidence == 0.92
@@ -125,7 +125,7 @@ async def test_encoder_receives_all_pairs():
     encoder = FakeEncoder(scores=[0.85])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     # Pair was sent to encoder despite zero shared tokens
     assert len(encoder.pairs_sent) == 1
@@ -140,7 +140,7 @@ async def test_encoder_filters_false_positives():
     encoder = FakeEncoder(scores=[0.15])  # below match_final_threshold
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     assert len(state.matches) == 0
 
@@ -158,7 +158,7 @@ async def test_encoder_picks_best_match_per_poly():
     encoder = FakeEncoder(scores=[0.90, 0.60])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     assert len(state.matches) == 1
     assert state.matches[0].confidence == 0.90
@@ -172,7 +172,7 @@ async def test_encoder_failure_produces_no_matches():
     encoder = FakeEncoder(scores=None)  # simulates failure
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     # generate_all_pairs sets confidence=0.0 — none pass the 0.5 threshold
     assert len(state.matches) == 0
@@ -185,7 +185,7 @@ async def test_encoder_year_mismatch_filtered():
     encoder = FakeEncoder(scores=[0.95])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     # Year mismatch filtered in generate_all_pairs — encoder never called
     assert len(encoder.pairs_sent) == 0
@@ -287,7 +287,7 @@ async def test_biencoder_reduces_candidate_count():
     encoder = FakeEncoder(scores=[0.85])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)  # type: ignore[arg-type]
 
     assert biencoder.call_count == 1
     # Encoder only received 1 pair (not the full cartesian product)
@@ -302,7 +302,7 @@ async def test_biencoder_none_skips_filtering():
     encoder = FakeEncoder(scores=[0.85])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=None)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=None)  # type: ignore[arg-type]
 
     # All candidates from generate_all_pairs reach the encoder
     assert len(encoder.pairs_sent) == 1
@@ -318,7 +318,7 @@ async def test_biencoder_scores_overwritten_by_crossencoder():
     encoder = FakeEncoder(scores=[0.92])  # cross-encoder sets confidence=0.92
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)  # type: ignore[arg-type]
 
     assert len(state.matches) == 1
     # Final confidence should be from the cross-encoder, not the bi-encoder

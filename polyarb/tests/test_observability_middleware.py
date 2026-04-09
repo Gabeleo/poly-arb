@@ -62,7 +62,7 @@ def test_metrics_middleware_records_duration():
     client = TestClient(app)
     client.get("/")
 
-    sample = metrics.http_request_duration.collect()[0]
+    sample = metrics.http_request_duration.collect()[0]  # type: ignore[index]
     count_samples = [s for s in sample.samples if s.name.endswith("_count")]
     assert any(s.value > 0 for s in count_samples)
 
@@ -80,7 +80,7 @@ def test_metrics_middleware_uses_route_path():
     client = TestClient(app)
     client.get("/items/42")
 
-    sample = metrics.http_request_duration.collect()[0]
+    sample = metrics.http_request_duration.collect()[0]  # type: ignore[index]
     # Find samples with route label
     route_labels = set()
     for s in sample.samples:

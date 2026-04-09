@@ -178,6 +178,8 @@ def analyze_pair(
             r["kalshi_no_ask"],
             fees,
         )
+        if arb is None:
+            continue
         scans.append((r["scan_ts"], arb))
         if is_profitable(arb):
             profitable_count += 1

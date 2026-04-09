@@ -84,7 +84,7 @@ class FakePolyClient:
 async def test_both_legs_succeed():
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -100,7 +100,7 @@ async def test_both_legs_succeed():
 async def test_both_legs_fail():
     kalshi = FakeKalshiClient(fail=True)
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -113,7 +113,7 @@ async def test_both_legs_fail():
 async def test_kalshi_fails_poly_succeeds_cancels_poly():
     kalshi = FakeKalshiClient(fail=True)
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -130,7 +130,7 @@ async def test_kalshi_fails_poly_succeeds_cancels_poly():
 async def test_kalshi_succeeds_poly_fails_cancels_kalshi():
     kalshi = FakeKalshiClient()
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -148,7 +148,7 @@ async def test_execution_params_passed_correctly():
     """Verify Kalshi gets cents and Poly gets float price."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     match = _profitable_match()
     await executor.execute(match, Config(order_size=5.0))
@@ -175,7 +175,7 @@ async def test_sides_are_complementary_in_orders():
     """Kalshi and Poly must take opposite sides."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     match = _profitable_match()
     await executor.execute(match, Config())
@@ -194,7 +194,7 @@ async def test_unwind_failure_reported():
 
     kalshi = FailCancelKalshi()
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -241,7 +241,7 @@ async def test_kelly_sizing_active():
     """With bankroll and kelly_fraction set, order size should differ from static."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     config = Config(bankroll=1000.0, kelly_fraction=0.5, order_size=10.0)
     result = await executor.execute(_profitable_match(), config)
@@ -257,7 +257,7 @@ async def test_kelly_disabled_bankroll_zero():
     """bankroll=0 falls back to static order_size."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     config = Config(bankroll=0.0, kelly_fraction=0.5, order_size=7.0)
     result = await executor.execute(_profitable_match(), config)
@@ -271,7 +271,7 @@ async def test_kelly_disabled_fraction_zero():
     """kelly_fraction=0 falls back to static order_size."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     config = Config(bankroll=1000.0, kelly_fraction=0.0, order_size=7.0)
     result = await executor.execute(_profitable_match(), config)
@@ -285,7 +285,7 @@ async def test_kelly_below_minimum_returns_failure():
     """If Kelly size < 1.0, execution should fail without placing orders."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     # Very small bankroll -> Kelly size < 1.0
     config = Config(bankroll=1.0, kelly_fraction=0.1, order_size=10.0)
@@ -302,7 +302,7 @@ async def test_kelly_max_position_cap():
     """Order count should not exceed max_position."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     config = Config(bankroll=10000.0, kelly_fraction=0.5, max_position=5.0)
     result = await executor.execute(_profitable_match(), config)
@@ -319,7 +319,7 @@ async def test_cross_executor_journals_success(journal: ExecutionJournal):
     """Both legs succeed → journal records completed execution with 2 filled legs."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config())
 
@@ -337,7 +337,7 @@ async def test_cross_executor_journals_both_fail(journal: ExecutionJournal):
     """Both legs fail → journal records failed execution."""
     kalshi = FakeKalshiClient(fail=True)
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
 
     await executor.execute(_profitable_match(), Config())
 
@@ -352,7 +352,7 @@ async def test_cross_executor_journals_partial_cancel(journal: ExecutionJournal)
     """Kalshi ok, Poly fails → journal shows Kalshi cancelled."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
 
     await executor.execute(_profitable_match(), Config())
 

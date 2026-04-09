@@ -174,6 +174,10 @@ def run_backtest(
 
             pair_key = (poly_cid, kalshi_ticker)
 
+            if arb is None:
+                in_window[pair_key] = False
+                continue
+
             if is_profitable(arb):
                 if not in_window[pair_key]:
                     # First profitable scan of a new window → enter trade

@@ -83,7 +83,7 @@ def test_auth_loads_key_and_signs():
     sig_bytes = base64.b64decode(hdrs["KALSHI-ACCESS-SIGNATURE"])
 
     # Should not raise
-    pub_key.verify(
+    pub_key.verify(  # type: ignore[attr-defined]
         sig_bytes,
         message,
         asym_padding.PSS(
@@ -109,7 +109,7 @@ def test_auth_strips_query_params():
         ts = hdrs["KALSHI-ACCESS-TIMESTAMP"]
         msg = f"{ts}GET/trade-api/v2/portfolio/positions".encode()
         sig = base64.b64decode(hdrs["KALSHI-ACCESS-SIGNATURE"])
-        pub_key.verify(
+        pub_key.verify(  # type: ignore[attr-defined]
             sig,
             msg,
             asym_padding.PSS(
@@ -205,7 +205,7 @@ def _make_order_set() -> OrderSet:
 
 def test_executor_places_all_orders():
     client = FakeClient(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     result = executor.execute(os)
@@ -222,7 +222,7 @@ def test_executor_places_all_orders():
 
 def test_executor_rejects_insufficient_balance():
     client = FakeClient(balance=1.0)  # Too low
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()  # costs $9.40
 
     result = executor.execute(os)
@@ -233,7 +233,7 @@ def test_executor_rejects_insufficient_balance():
 
 def test_executor_tracks_trades_and_profit():
     client = FakeClient(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     executor.execute(os)
@@ -252,7 +252,7 @@ def test_executor_cancels_on_partial_failure():
             return super().create_order(**kwargs)
 
     client = FailSecondLeg(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     result = executor.execute(os)

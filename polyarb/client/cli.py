@@ -303,6 +303,7 @@ class ClientShell(cmd.Cmd):
                 key = key.strip()
                 val = val.strip()
                 # Try to coerce to number
+                parsed: int | float | str
                 try:
                     parsed = int(val)
                 except ValueError:
@@ -328,8 +329,8 @@ class ClientShell(cmd.Cmd):
     do_q = do_quit
     do_EOF = do_quit
 
-    def emptyline(self) -> None:
-        pass
+    def emptyline(self) -> bool:
+        return False
 
     def default(self, line: str) -> None:
         print(f"{YELLOW}Unknown command: {line!r}. Type {B}help{R}{YELLOW} for commands.{R}")

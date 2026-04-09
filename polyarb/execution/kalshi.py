@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 try:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
     _HAS_CRYPTO = True
 except ImportError:
@@ -59,7 +60,10 @@ class KalshiAuth:
             )
         self.api_key_id = api_key_id
         with open(private_key_path, "rb") as f:
-            self._private_key = serialization.load_pem_private_key(f.read(), password=None)
+            key = serialization.load_pem_private_key(f.read(), password=None)
+        if not isinstance(key, rsa.RSAPrivateKey):
+            raise TypeError("Kalshi requires an RSA private key")
+        self._private_key = key
 
     def headers(self, method: str, path: str) -> dict[str, str]:
         """Build signed headers for a Kalshi API request.

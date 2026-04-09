@@ -116,7 +116,10 @@ class SqliteExecutionRepository:
                     size=size,
                 )
             )
-            return result.inserted_primary_key[0]
+            pk = result.inserted_primary_key
+            if pk is None:
+                raise RuntimeError("INSERT did not return a primary key")
+            return pk[0]
 
     def mark_sent(self, row_id: int) -> None:
         with self._engine.begin() as conn:

@@ -98,7 +98,7 @@ def _make_manager(
     st = state or State(config=cfg)
     b = bot or FakeBot()
     k = kalshi or FakeKalshiClient()
-    mgr = ApprovalManager(state=st, bot=b, kalshi_client=k, config=cfg)
+    mgr = ApprovalManager(state=st, bot=b, kalshi_client=k, config=cfg)  # type: ignore[arg-type]
     return mgr, b, k, st
 
 
