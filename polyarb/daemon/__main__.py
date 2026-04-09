@@ -12,7 +12,7 @@ import uvicorn
 
 from polyarb.config import Config
 from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
-from polyarb.daemon.server import create_app
+from polyarb.api.app import create_app
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 from polyarb.data.async_live import AsyncLiveDataProvider
@@ -49,14 +49,18 @@ def main() -> None:
     configure_logging(json_output=log_json, level=log_level)
 
     # Database setup
+    from polyarb.api.audit import AuditLogger
     from polyarb.db.engine import create_engine as create_db_engine, get_database_url
     from polyarb.db.models import metadata
+    from polyarb.db.repositories.audit import SqliteAuditRepository
     from polyarb.db.repositories.matches import SqliteMatchSnapshotRepository
 
     db_url = get_database_url()
     db_engine = create_db_engine(db_url)
     metadata.create_all(db_engine)
     match_repo = SqliteMatchSnapshotRepository(db_engine)
+    audit_repo = SqliteAuditRepository(db_engine)
+    audit_logger = AuditLogger(repo=audit_repo)
     logger.info("Database: %s", db_url)
 
     config = Config(scan_interval=args.interval)
@@ -183,6 +187,7 @@ def main() -> None:
         encoder_client=encoder_client,
         poly_provider=poly,
         kalshi_provider=kalshi,
+        audit_repo=audit_logger,
     )
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", log_config=None)

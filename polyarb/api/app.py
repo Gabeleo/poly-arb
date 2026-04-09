@@ -1,0 +1,76 @@
+"""Starlette app factory — assembles routes, middleware, and state."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.routing import Route
+
+from polyarb.api.middleware.auth import ApiKeyMiddleware
+from polyarb.api.middleware.rate_limit import RateLimitMiddleware
+from polyarb.api.openapi import openapi_spec
+from polyarb.api.routes import (
+    config,
+    execution,
+    health,
+    matches,
+    opportunities,
+    webhooks,
+    ws,
+)
+from polyarb.daemon.state import State
+from polyarb.observability.middleware import MetricsMiddleware, RequestIdMiddleware
+
+logger = logging.getLogger(__name__)
+
+
+def create_app(
+    state: State,
+    kalshi_client: Any = None,
+    lifespan: Any = None,
+    approval_manager: Any = None,
+    telegram_bot: Any = None,
+    api_key: str | None = None,
+    encoder_client: Any = None,
+    poly_provider: Any = None,
+    kalshi_provider: Any = None,
+    audit_repo: Any = None,
+) -> Starlette:
+    """Build and return a Starlette application wired to *state*."""
+
+    routes = [
+        *health.routes,
+        *matches.routes,
+        *opportunities.routes,
+        *config.routes,
+        *execution.routes,
+        *webhooks.routes,
+        *ws.routes,
+        Route("/openapi.json", openapi_spec, methods=["GET"]),
+    ]
+
+    middleware = [
+        Middleware(RequestIdMiddleware),   # outermost — sets request_id first
+        Middleware(MetricsMiddleware),     # times everything below
+        Middleware(RateLimitMiddleware),   # rate check before auth
+    ]
+    if api_key:
+        middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))
+        logger.info("API key authentication enabled")
+
+    app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
+
+    # Store dependencies on app.state so route handlers can access them
+    app.state.daemon_state = state
+    app.state.kalshi_client = kalshi_client
+    app.state.approval_manager = approval_manager
+    app.state.telegram_bot = telegram_bot
+    app.state.encoder_client = encoder_client
+    app.state.poly_provider = poly_provider
+    app.state.kalshi_provider = kalshi_provider
+    app.state.audit_repo = audit_repo
+
+    return app

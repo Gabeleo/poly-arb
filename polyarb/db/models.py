@@ -85,6 +85,17 @@ execution_legs = SATable(
     UniqueConstraint("execution_id", "leg_index", name="uq_exec_leg"),
 )
 
+audit_log = SATable(
+    "audit_log",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("timestamp", Text, nullable=False),
+    Column("actor", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("details", Text, nullable=False),
+    Column("request_id", Text, nullable=True),
+)
+
 match_snapshots = SATable(
     "match_snapshots",
     metadata,
@@ -121,3 +132,5 @@ Index("idx_legs_status", execution_legs.c.status)
 Index("idx_exec_status", executions.c.status)
 Index("idx_match_snap_scan", match_snapshots.c.scan_ts)
 Index("idx_match_snap_pair", match_snapshots.c.poly_condition_id, match_snapshots.c.kalshi_ticker)
+Index("idx_audit_action", audit_log.c.action)
+Index("idx_audit_ts", audit_log.c.timestamp)

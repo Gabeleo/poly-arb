@@ -100,3 +100,12 @@ The system must answer four questions in order. Each gates the next — if any a
 ## Tests
 
 Tests in `polyarb/tests/`. Key modules: `test_single.py`, `test_multi.py`, `test_orders.py` (single-platform), `test_matching.py` (cross-platform matcher), `test_encoder_client.py`, `test_kalshi_exec.py`, `test_daemon_engine.py`. No shared fixtures — each test constructs its own data.
+
+## File Inventory
+
+When asked to count how many code files are in this repo:
+
+1. Read `prompt/file-inventory.md` to get the current inventory.
+2. Scan the repo for any files not already listed in the inventory.
+3. Add any new files to the appropriate section in `prompt/file-inventory.md`.
+4. Update the summary table totals at the top.
