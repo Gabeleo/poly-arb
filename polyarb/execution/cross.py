@@ -14,6 +14,7 @@ from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.execution.idempotency import generate_idempotency_key
 from polyarb.matching.matcher import MatchedPair
+from polyarb.observability import metrics
 from polyarb.sizing import kelly_size
 
 if TYPE_CHECKING:
@@ -204,6 +205,7 @@ class CrossExecutor:
             logger.info("Both legs filled for %s", match.kalshi_market.condition_id)
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, True, params["profit"])
+            metrics.execution_total.labels(status="completed").inc()
             return ExecutionResult(
                 success=True,
                 kalshi_order=kalshi_result,
@@ -214,6 +216,7 @@ class CrossExecutor:
         if kalshi_failed and poly_failed:
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, False)
+            metrics.execution_total.labels(status="failed").inc()
             return ExecutionResult(
                 success=False,
                 error=f"Both legs failed — Kalshi: {kalshi_result}, Poly: {poly_result}",
@@ -227,6 +230,7 @@ class CrossExecutor:
                 self.journal.record_cancel(k_row_id, "cancelled")
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, False)
+            metrics.execution_total.labels(status="failed").inc()
             return ExecutionResult(
                 success=False,
                 kalshi_order=kalshi_result,
@@ -241,6 +245,7 @@ class CrossExecutor:
             self.journal.record_cancel(p_row_id, "cancelled")
         if self.journal is not None and execution_id:
             self.journal.record_completion(execution_id, False)
+        metrics.execution_total.labels(status="failed").inc()
         return ExecutionResult(
             success=False,
             poly_order=poly_result,

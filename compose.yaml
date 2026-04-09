@@ -71,6 +71,7 @@ services:
       - "9090:9090"
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerting:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
 
   grafana:

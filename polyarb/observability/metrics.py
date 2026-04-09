@@ -76,3 +76,14 @@ execution_total = Counter(
     "Trade execution outcomes",
     ["status"],
 )
+orphaned_legs = Gauge(
+    "polyarb_orphaned_legs",
+    "Number of execution legs in orphaned/sent state",
+)
+
+# Database
+db_size_bytes = Gauge(
+    "polyarb_db_size_bytes",
+    "SQLite database file size in bytes",
+    ["database"],
+)
