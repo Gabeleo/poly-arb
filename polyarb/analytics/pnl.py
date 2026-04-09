@@ -127,10 +127,10 @@ class SqlitePnLProvider:
         unrealized = sum(p.unrealized for p in pairs if p.is_open)
 
         return PnLSummary(
-            total_realized=float(realized),
+            total_realized=float(realized or 0),
             total_unrealized=unrealized,
-            open_positions=int(open_count),
-            closed_positions=int(closed_count),
+            open_positions=int(open_count or 0),
+            closed_positions=int(closed_count or 0),
         )
 
     def daily(self, lookback_days: int = 30) -> list[DailyPnL]:
