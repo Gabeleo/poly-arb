@@ -63,6 +63,7 @@ executions = SATable(
     Column("profit", Float, nullable=True),
     Column("completed_at", Text, nullable=True),
     Column("idempotency_key", Text, nullable=True),
+    UniqueConstraint("idempotency_key", name="uq_exec_idempotency"),
 )
 
 execution_legs = SATable(

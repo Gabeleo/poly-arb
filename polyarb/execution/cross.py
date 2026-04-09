@@ -7,6 +7,8 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 
+from sqlalchemy.exc import IntegrityError
+
 from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.execution.idempotency import generate_idempotency_key
@@ -103,7 +105,23 @@ class CrossExecutor:
         p_row_id = None
         if self.journal is not None:
             execution_id = uuid.uuid4().hex[:12]
-            self.journal.record_execution(execution_id, match_key, 2, idempotency_key=idem_key)
+            try:
+                self.journal.record_execution(execution_id, match_key, 2, idempotency_key=idem_key)
+            except IntegrityError:
+                # Lost the race — another coroutine inserted first
+                existing = self.journal.find_by_idempotency_key(idem_key)
+                if existing is not None:
+                    logger.info(
+                        "Idempotency race: execution %s won for key %s",
+                        existing["execution_id"], idem_key,
+                    )
+                    return ExecutionResult(
+                        success=existing["status"] == "completed",
+                        error=f"Duplicate execution skipped (existing={existing['execution_id']})",
+                    )
+                # Winner already failed — we can proceed with a fresh key
+                execution_id = uuid.uuid4().hex[:12]
+                self.journal.record_execution(execution_id, match_key, 2)
             k_row_id = self.journal.record_attempt(
                 execution_id, 0, "kalshi", k["ticker"], k["side"], "buy",
                 k["price"], float(size),

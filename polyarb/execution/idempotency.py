@@ -49,5 +49,5 @@ def generate_idempotency_key(
         60-second window for the same inputs.
     """
     bucket = _timestamp_bucket(ts)
-    payload = f"{match_key}|{direction}|{size}|{bucket}"
+    payload = f"{match_key}|{direction}|{int(size)}|{bucket}"
     return hashlib.sha256(payload.encode()).hexdigest()[:16]

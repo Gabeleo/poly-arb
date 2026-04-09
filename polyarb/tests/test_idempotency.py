@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 
 import pytest
 
 from polyarb.config import Config
-from polyarb.execution.cross import CrossExecutor, ExecutionResult
+from polyarb.execution.cross import CrossExecutor
 from polyarb.execution.idempotency import (
     BUCKET_SECONDS,
     generate_idempotency_key,
@@ -130,6 +129,13 @@ def test_key_is_16_hex_chars():
     int(key, 16)  # should not raise
 
 
+def test_int_and_float_size_produce_same_key():
+    ts = 1_700_000_000.0
+    k1 = generate_idempotency_key("m1", "kalshi_yes_poly_no", 10, ts=ts)
+    k2 = generate_idempotency_key("m1", "kalshi_yes_poly_no", 10.0, ts=ts)
+    assert k1 == k2
+
+
 # ── Journal dedup tests ──────────────────────────────────────
 
 
@@ -220,3 +226,41 @@ async def test_no_journal_no_idempotency():
     assert result2.success is True
     # Both executed — no dedup without journal
     assert len(kalshi.orders) == 2
+
+
+@pytest.mark.asyncio
+async def test_unique_constraint_prevents_race(journal: ExecutionJournal):
+    """Simulates the TOCTOU race: soft check misses, but insert hits unique constraint."""
+    kalshi = FakeKalshiClient()
+    poly = FakePolyClient()
+
+    # First execution succeeds normally
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    result1 = await executor.execute(_profitable_match(), Config())
+    assert result1.success is True
+
+    first_exec = journal.get_history(limit=1)[0]
+    idem_key = first_exec["idempotency_key"]
+    assert idem_key is not None
+
+    # Patch find_by_idempotency_key to return None (simulates the race:
+    # the other coroutine hasn't inserted yet when we check)
+    real_find = journal.find_by_idempotency_key
+    journal.find_by_idempotency_key = lambda key: None  # type: ignore[assignment]
+
+    # Second execution: soft check sees nothing, but insert hits unique constraint.
+    # IntegrityError handler falls back to lookup (using the real method).
+    # Restore real method so the fallback lookup inside the except block works.
+    original_record = journal.record_execution
+
+    def patched_record(*args, **kwargs):
+        # Restore find so the IntegrityError handler's fallback lookup works
+        journal.find_by_idempotency_key = real_find  # type: ignore[assignment]
+        return original_record(*args, **kwargs)
+
+    journal.record_execution = patched_record  # type: ignore[assignment]
+
+    result2 = await executor.execute(_profitable_match(), Config())
+    assert "Duplicate execution skipped" in result2.error
+    # Only the first execution placed orders
+    assert len(kalshi.orders) == 1
