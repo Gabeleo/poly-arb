@@ -1,0 +1,24 @@
+line-length = 100
+target-version = "py311"
+extend-exclude = ["--worktree"]
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "C901",   # mccabe complexity
+]
+ignore = [
+    "E501",   # line length handled by formatter
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.isort]
+known-first-party = ["polyarb"]
