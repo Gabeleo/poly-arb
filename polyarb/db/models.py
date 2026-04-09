@@ -126,6 +126,34 @@ match_snapshots = SATable(
     ),
 )
 
+positions = SATable(
+    "positions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("platform", Text, nullable=False),
+    Column("ticker", Text, nullable=False),
+    Column("side", Text, nullable=False),
+    Column("quantity", Float, nullable=False),
+    Column("avg_price", Float, nullable=False),
+    Column("opened_at", Text, nullable=False),
+    Column("closed_at", Text, nullable=True),
+    Column("execution_id", Text, nullable=True),
+    Column("realized_pnl", Float, nullable=True),
+    UniqueConstraint("platform", "ticker", "side", name="uq_position"),
+)
+
+risk_events = SATable(
+    "risk_events",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("timestamp", Text, nullable=False),
+    Column("event_type", Text, nullable=False),
+    Column("severity", Text, nullable=False),
+    Column("details", Text, nullable=False),
+    Column("execution_id", Text, nullable=True),
+    Column("resolved_at", Text, nullable=True),
+)
+
 # Indexes
 Index("idx_poly_condition", polymarket_snapshots.c.condition_id, polymarket_snapshots.c.scan_ts)
 Index("idx_kalshi_ticker", kalshi_snapshots.c.ticker, kalshi_snapshots.c.scan_ts)
@@ -139,3 +167,7 @@ Index("idx_match_snap_scan", match_snapshots.c.scan_ts)
 Index("idx_match_snap_pair", match_snapshots.c.poly_condition_id, match_snapshots.c.kalshi_ticker)
 Index("idx_audit_action", audit_log.c.action)
 Index("idx_audit_ts", audit_log.c.timestamp)
+Index("idx_positions_platform", positions.c.platform, positions.c.ticker)
+Index("idx_positions_execution", positions.c.execution_id)
+Index("idx_risk_events_type", risk_events.c.event_type)
+Index("idx_risk_events_ts", risk_events.c.timestamp)

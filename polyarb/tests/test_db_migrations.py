@@ -39,12 +39,14 @@ def test_upgrade_to_head(db_path):
     assert "execution_legs" in tables
     assert "match_snapshots" in tables
     assert "audit_log" in tables
+    assert "positions" in tables
+    assert "risk_events" in tables
     assert "alembic_version" in tables
     engine.dispose()
 
 
 def test_downgrade_one_step(db_path):
-    """Downgrade -1 drops audit_log but keeps other tables."""
+    """Downgrade -1 drops positions and risk_events but keeps other tables."""
     cfg = _alembic_config(db_path)
     command.upgrade(cfg, "head")
     command.downgrade(cfg, "-1")
@@ -52,7 +54,9 @@ def test_downgrade_one_step(db_path):
     engine = create_engine(f"sqlite:///{db_path}")
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
-    assert "audit_log" not in tables
+    assert "positions" not in tables
+    assert "risk_events" not in tables
+    assert "audit_log" in tables
     assert "match_snapshots" in tables
     assert "polymarket_snapshots" in tables
     assert "executions" in tables
