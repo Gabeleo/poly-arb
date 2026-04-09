@@ -6,7 +6,8 @@ import prometheus_client
 import pytest
 
 from polyarb.config import Config
-from polyarb.daemon.engine import _CircuitBreaker, run_scan_once
+from polyarb.daemon.engine import _MetricsCircuitBreaker as _CircuitBreaker
+from polyarb.daemon.engine import run_scan_once
 from polyarb.daemon.state import State
 from polyarb.models import Market, Side, Token
 from polyarb.observability import metrics

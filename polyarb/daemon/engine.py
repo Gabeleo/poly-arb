@@ -16,6 +16,7 @@ from polyarb.matching.matcher import MatchedPair, find_matches, generate_all_pai
 from polyarb.models import Market
 from polyarb.observability import metrics
 from polyarb.observability.context import new_scan_id
+from polyarb.risk.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -25,49 +26,27 @@ def _scan_timestamp() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# Timeouts and circuit breaker defaults
 FETCH_TIMEOUT = 30.0  # seconds per provider fetch
-CIRCUIT_BREAKER_THRESHOLD = 5  # consecutive failures before backoff
-CIRCUIT_BREAKER_MAX_DELAY = 300.0  # 5-minute cap on backoff
 
 
-class _CircuitBreaker:
-    """Simple consecutive-failure counter with exponential backoff."""
+def _metrics_state_change(name: str, is_open: bool) -> None:
+    """Update Prometheus gauge when circuit breaker state changes."""
+    metrics.circuit_breaker_state.labels(provider=name).set(1 if is_open else 0)
 
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self._failures = 0
 
-    def record_success(self) -> None:
-        if self._failures > 0:
-            logger.info("Provider %s recovered after %d failures", self.name, self._failures)
-        self._failures = 0
-        metrics.circuit_breaker_state.labels(provider=self.name).set(0)
+def _make_circuit_breaker(name: str) -> CircuitBreaker:
+    return CircuitBreaker(name=name, on_state_change=_metrics_state_change)
 
-    def record_failure(self, exc: Exception) -> None:
-        self._failures += 1
-        logger.warning(
-            "Provider %s failed (%d consecutive): %s",
-            self.name,
-            self._failures,
-            exc,
-        )
+
+class _MetricsCircuitBreaker(CircuitBreaker):
+    """CircuitBreaker that also updates Prometheus metrics."""
+
+    def __init__(self, name: str, **kwargs) -> None:
+        super().__init__(name=name, on_state_change=_metrics_state_change, **kwargs)
+
+    def record_failure(self, exc: BaseException | None = None) -> None:
+        super().record_failure(exc)
         metrics.fetch_errors.labels(provider=self.name).inc()
-        if self.is_open:
-            metrics.circuit_breaker_state.labels(provider=self.name).set(1)
-
-    @property
-    def is_open(self) -> bool:
-        return self._failures >= CIRCUIT_BREAKER_THRESHOLD
-
-    @property
-    def backoff_delay(self) -> float:
-        if not self.is_open:
-            return 0.0
-        delay = min(
-            10.0 * (2 ** (self._failures - CIRCUIT_BREAKER_THRESHOLD)), CIRCUIT_BREAKER_MAX_DELAY
-        )
-        return delay
 
 
 async def _verify_candidates(
@@ -108,8 +87,8 @@ async def _verify_candidates(
 async def _fetch_markets(
     poly,
     kalshi,
-    poly_cb: _CircuitBreaker,
-    kalshi_cb: _CircuitBreaker,
+    poly_cb: CircuitBreaker,
+    kalshi_cb: CircuitBreaker,
 ) -> tuple[list[Market], list[Market]]:
     """Fetch markets from both providers with per-provider timeout and circuit breaker."""
     poly_markets: list[Market] = []
@@ -282,14 +261,14 @@ async def run_scan_once(
     kalshi,
     approval_manager=None,
     encoder_client: EncoderClient | None = None,
-    poly_cb: _CircuitBreaker | None = None,
-    kalshi_cb: _CircuitBreaker | None = None,
+    poly_cb: CircuitBreaker | None = None,
+    kalshi_cb: CircuitBreaker | None = None,
     biencoder=None,
     match_repo=None,
 ) -> None:
     """Fetch from both providers, detect matches and opportunities, update state."""
-    poly_cb = poly_cb or _CircuitBreaker("poly")
-    kalshi_cb = kalshi_cb or _CircuitBreaker("kalshi")
+    poly_cb = poly_cb or _MetricsCircuitBreaker("poly")
+    kalshi_cb = kalshi_cb or _MetricsCircuitBreaker("kalshi")
 
     sid = new_scan_id()
     scan_ts = _scan_timestamp()
@@ -342,8 +321,8 @@ async def run_scan_loop(
     If *stop_event* is set, the loop finishes the current scan then exits.
     """
     last_digest = time.monotonic()
-    poly_cb = _CircuitBreaker("poly")
-    kalshi_cb = _CircuitBreaker("kalshi")
+    poly_cb = _MetricsCircuitBreaker("poly")
+    kalshi_cb = _MetricsCircuitBreaker("kalshi")
 
     while True:
         # Check for shutdown request
