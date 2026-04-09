@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.execution.idempotency import generate_idempotency_key
+from polyarb.execution.state_machine import LegStatus, OrderStateMachine
 from polyarb.matching.matcher import MatchedPair
 from polyarb.observability import metrics
 from polyarb.sizing import kelly_size
@@ -108,10 +109,12 @@ class CrossExecutor:
                     error=f"Duplicate execution skipped (existing={existing['execution_id']})",
                 )
 
-        # Journal: record execution and legs
+        # Journal: record execution and legs; track via state machines
         execution_id = ""
         k_row_id = None
         p_row_id = None
+        k_sm: OrderStateMachine | None = None
+        p_sm: OrderStateMachine | None = None
         if self.journal is not None:
             execution_id = uuid.uuid4().hex[:12]
             try:
@@ -142,7 +145,10 @@ class CrossExecutor:
                 k["price"],
                 float(size),
             )
+            k_sm = OrderStateMachine(leg_id=k_row_id, execution_id=execution_id)
+            k_sm.submit()
             self.journal.mark_sent(k_row_id)
+
             p_row_id = self.journal.record_attempt(
                 execution_id,
                 1,
@@ -153,6 +159,8 @@ class CrossExecutor:
                 p["price"],
                 float(size),
             )
+            p_sm = OrderStateMachine(leg_id=p_row_id, execution_id=execution_id)
+            p_sm.submit()
             self.journal.mark_sent(p_row_id)
 
         kalshi_coro = self.kalshi.create_order(
@@ -183,20 +191,28 @@ class CrossExecutor:
         kalshi_failed = isinstance(kalshi_result, BaseException)
         poly_failed = isinstance(poly_result, BaseException)
 
-        # Journal: record results
+        # Journal: record results via state machine transitions
         if self.journal is not None:
-            if not kalshi_failed and k_row_id is not None:
+            if not kalshi_failed and k_row_id is not None and k_sm is not None:
                 assert isinstance(kalshi_result, dict)
                 oid = kalshi_result.get("order_id", "")
-                self.journal.record_result(k_row_id, oid, "filled")
-            elif kalshi_failed and k_row_id is not None:
-                self.journal.record_result(k_row_id, None, "failed", error=str(kalshi_result))
-            if not poly_failed and p_row_id is not None:
+                k_sm.fill()
+                self.journal.record_result(k_row_id, oid, LegStatus.FILLED)
+            elif kalshi_failed and k_row_id is not None and k_sm is not None:
+                k_sm.reject(error=str(kalshi_result))
+                self.journal.record_result(
+                    k_row_id, None, LegStatus.REJECTED, error=str(kalshi_result)
+                )
+            if not poly_failed and p_row_id is not None and p_sm is not None:
                 assert isinstance(poly_result, dict)
                 oid = poly_result.get("orderID", "")
-                self.journal.record_result(p_row_id, oid, "filled")
-            elif poly_failed and p_row_id is not None:
-                self.journal.record_result(p_row_id, None, "failed", error=str(poly_result))
+                p_sm.fill()
+                self.journal.record_result(p_row_id, oid, LegStatus.FILLED)
+            elif poly_failed and p_row_id is not None and p_sm is not None:
+                p_sm.reject(error=str(poly_result))
+                self.journal.record_result(
+                    p_row_id, None, LegStatus.REJECTED, error=str(poly_result)
+                )
 
         # Both succeed
         if not kalshi_failed and not poly_failed:
@@ -226,8 +242,9 @@ class CrossExecutor:
         if not kalshi_failed and poly_failed:
             assert isinstance(kalshi_result, dict)
             unwound = await self._try_cancel_kalshi(kalshi_result)
-            if self.journal is not None and k_row_id is not None and unwound:
-                self.journal.record_cancel(k_row_id, "cancelled")
+            if self.journal is not None and k_row_id is not None and k_sm is not None and unwound:
+                k_sm.cancel()
+                self.journal.record_cancel(k_row_id, LegStatus.CANCELLED)
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, False)
             metrics.execution_total.labels(status="failed").inc()
@@ -241,8 +258,9 @@ class CrossExecutor:
         # poly_ok and not kalshi_ok
         assert isinstance(poly_result, dict)
         unwound = await self._try_cancel_poly(poly_result)
-        if self.journal is not None and p_row_id is not None and unwound:
-            self.journal.record_cancel(p_row_id, "cancelled")
+        if self.journal is not None and p_row_id is not None and p_sm is not None and unwound:
+            p_sm.cancel()
+            self.journal.record_cancel(p_row_id, LegStatus.CANCELLED)
         if self.journal is not None and execution_id:
             self.journal.record_completion(execution_id, False)
         metrics.execution_total.labels(status="failed").inc()
