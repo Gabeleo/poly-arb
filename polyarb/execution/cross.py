@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 
@@ -44,7 +44,7 @@ class CrossExecutor:
     poly: object  # AsyncPolymarketClient
     journal: object | None = None  # Optional ExecutionJournal
 
-    async def execute(self, match: MatchedPair, config: Config) -> ExecutionResult:
+    async def execute(self, match: MatchedPair, config: Config) -> ExecutionResult:  # noqa: C901
         """Place both legs concurrently. Unwind on partial failure."""
         params = match.execution_params
 
@@ -92,7 +92,9 @@ class CrossExecutor:
             if existing is not None:
                 logger.info(
                     "Idempotency hit: execution %s already exists for key %s (status=%s)",
-                    existing["execution_id"], idem_key, existing["status"],
+                    existing["execution_id"],
+                    idem_key,
+                    existing["status"],
                 )
                 return ExecutionResult(
                     success=existing["status"] == "completed",
@@ -113,7 +115,8 @@ class CrossExecutor:
                 if existing is not None:
                     logger.info(
                         "Idempotency race: execution %s won for key %s",
-                        existing["execution_id"], idem_key,
+                        existing["execution_id"],
+                        idem_key,
                     )
                     return ExecutionResult(
                         success=existing["status"] == "completed",
@@ -123,13 +126,25 @@ class CrossExecutor:
                 execution_id = uuid.uuid4().hex[:12]
                 self.journal.record_execution(execution_id, match_key, 2)
             k_row_id = self.journal.record_attempt(
-                execution_id, 0, "kalshi", k["ticker"], k["side"], "buy",
-                k["price"], float(size),
+                execution_id,
+                0,
+                "kalshi",
+                k["ticker"],
+                k["side"],
+                "buy",
+                k["price"],
+                float(size),
             )
             self.journal.mark_sent(k_row_id)
             p_row_id = self.journal.record_attempt(
-                execution_id, 1, "polymarket", p["token_id"], p["side"], "buy",
-                p["price"], float(size),
+                execution_id,
+                1,
+                "polymarket",
+                p["token_id"],
+                p["side"],
+                "buy",
+                p["price"],
+                float(size),
             )
             self.journal.mark_sent(p_row_id)
 
@@ -149,7 +164,9 @@ class CrossExecutor:
         )
 
         kalshi_result, poly_result = await asyncio.gather(
-            kalshi_coro, poly_coro, return_exceptions=True,
+            kalshi_coro,
+            poly_coro,
+            return_exceptions=True,
         )
 
         kalshi_ok = not isinstance(kalshi_result, BaseException)

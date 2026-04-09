@@ -69,7 +69,6 @@ def test_metrics_middleware_records_duration():
 
 def test_metrics_middleware_uses_route_path():
     """The route label should be the pattern, not resolved path."""
-    captured = {}
 
     async def detail(request: Request) -> JSONResponse:
         return JSONResponse({"id": request.path_params["id"]})

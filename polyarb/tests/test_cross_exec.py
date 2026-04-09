@@ -13,12 +13,14 @@ from polyarb.execution.journal import ExecutionJournal
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Market, Side, Token
 
-
 # ── Helpers ───────────────────────────────────────────────────
 
 
 def _mkt(
-    cid: str, platform: str, yes_ask: float, no_ask: float | None = None,
+    cid: str,
+    platform: str,
+    yes_ask: float,
+    no_ask: float | None = None,
 ) -> Market:
     if no_ask is None:
         no_ask = round(1.0 - yes_ask, 4)
@@ -356,7 +358,7 @@ async def test_cross_executor_journals_partial_cancel(journal: ExecutionJournal)
 
     history = journal.get_history(limit=1)
     assert history[0]["status"] == "failed"
-    legs = sorted(history[0]["legs"], key=lambda l: l["leg_index"])
+    legs = sorted(history[0]["legs"], key=lambda leg: leg["leg_index"])
     # Kalshi leg was filled then cancelled
     assert legs[0]["status"] == "cancelled"
     # Poly leg failed

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from polyarb.daemon.state import State
@@ -30,7 +30,7 @@ async def check_readiness(state: State) -> tuple[bool, dict]:
     if state.last_scan_at is None:
         return False, {"ready": False, "reason": "no scan timestamp"}
 
-    age = (datetime.now(timezone.utc) - state.last_scan_at).total_seconds()
+    age = (datetime.now(UTC) - state.last_scan_at).total_seconds()
     max_age = state.config.scan_interval * 2
     if age > max_age:
         return False, {
@@ -48,7 +48,7 @@ async def _probe_dependency(name: str, coro) -> dict:
         await asyncio.wait_for(coro, timeout=5.0)
         latency_ms = round((time.monotonic() - start) * 1000, 1)
         return {"name": name, "status": "ok", "latency_ms": latency_ms}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         latency_ms = round((time.monotonic() - start) * 1000, 1)
         return {"name": name, "status": "degraded", "latency_ms": latency_ms, "error": "timeout"}
     except Exception as exc:
@@ -56,7 +56,7 @@ async def _probe_dependency(name: str, coro) -> dict:
         return {"name": name, "status": "down", "latency_ms": latency_ms, "error": str(exc)}
 
 
-async def check_deep(
+async def check_deep(  # noqa: C901
     state: State,
     encoder_client: Any = None,
     poly_provider: Any = None,
@@ -75,7 +75,7 @@ async def check_deep(
             return
         if state.last_scan_at is None:
             raise RuntimeError("no scan timestamp")
-        age = (datetime.now(timezone.utc) - state.last_scan_at).total_seconds()
+        age = (datetime.now(UTC) - state.last_scan_at).total_seconds()
         max_age = state.config.scan_interval * 2 + 10
         if age > max_age:
             raise RuntimeError(f"stale ({age:.0f}s ago)")
@@ -83,6 +83,7 @@ async def check_deep(
     probes.append(_probe_dependency("scan_loop", _check_scan_loop()))
 
     if poly_provider is not None:
+
         async def _check_poly():
             # Try a lightweight call; providers expose get_active_markets
             # but we use search_markets with empty query as a health ping
@@ -96,6 +97,7 @@ async def check_deep(
         probes.append(_probe_dependency("polymarket_api", _check_poly()))
 
     if kalshi_provider is not None:
+
         async def _check_kalshi():
             if hasattr(kalshi_provider, "health"):
                 await kalshi_provider.health()
@@ -107,6 +109,7 @@ async def check_deep(
         probes.append(_probe_dependency("kalshi_api", _check_kalshi()))
 
     if encoder_client is not None:
+
         async def _check_encoder():
             ok = await encoder_client.health()
             if not ok:

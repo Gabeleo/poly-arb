@@ -16,7 +16,9 @@ class DaemonClient:
     ) -> None:
         headers = {"X-API-Key": api_key} if api_key else {}
         self._client = client or httpx.Client(
-            base_url=base_url, timeout=10.0, headers=headers,
+            base_url=base_url,
+            timeout=10.0,
+            headers=headers,
         )
         self._owns_client = client is None
         self._api_key = api_key

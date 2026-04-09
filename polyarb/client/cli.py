@@ -7,7 +7,9 @@ import shutil
 
 from polyarb.client.api import DaemonClient
 from polyarb.client.ws_listener import start_ws_listener
-from polyarb.colors import BOLD as B, CYAN, DIM, GREEN, RED, RESET as R, YELLOW
+from polyarb.colors import BOLD as B
+from polyarb.colors import CYAN, DIM, GREEN, RED, YELLOW
+from polyarb.colors import RESET as R
 
 
 def _cols() -> int:
@@ -64,14 +66,10 @@ class ClientShell(cmd.Cmd):
 
         elif msg_type == "new_opportunities":
             items = data.get("data", [])
-            profitable = [
-                o for o in items
-                if o.get("expected_profit_per_share", 0) > 0
-            ]
+            profitable = [o for o in items if o.get("expected_profit_per_share", 0) > 0]
             if profitable:
                 print(
-                    f"\n{CYAN}[ws]{R} {GREEN}{len(profitable)} new profitable "
-                    f"opportunity(ies){R}"
+                    f"\n{CYAN}[ws]{R} {GREEN}{len(profitable)} new profitable opportunity(ies){R}"
                 )
                 print(
                     f"     Run {B}scan{R} to view.\n{self.prompt}",
@@ -163,10 +161,7 @@ class ClientShell(cmd.Cmd):
             else:
                 color = RED
             sign = "+" if profit > 0 else ""
-            print(
-                f"{color}{i:>3}  {type_label:<14}  "
-                f"{sign}${profit:>7.4f}  {desc}{R}"
-            )
+            print(f"{color}{i:>3}  {type_label:<14}  {sign}${profit:>7.4f}  {desc}{R}")
 
         print(f"\n  Use {B}detail <#>{R} for details, {B}execute <#>{R} to trade.\n")
 
@@ -206,8 +201,12 @@ class ClientShell(cmd.Cmd):
             print(f"    {DIM}{pm_url}{R}")
         yt = pm.get("yes_token", {})
         nt = pm.get("no_token", {})
-        print(f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}")
-        print(f"    NO   mid={nt.get('midpoint', 0):.4f}  bid={nt.get('best_bid', 0):.4f}  ask={nt.get('best_ask', 0):.4f}")
+        print(
+            f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}"
+        )
+        print(
+            f"    NO   mid={nt.get('midpoint', 0):.4f}  bid={nt.get('best_bid', 0):.4f}  ask={nt.get('best_ask', 0):.4f}"
+        )
 
         km = data.get("kalshi_market", {})
         km_url = _market_url(km)
@@ -217,8 +216,12 @@ class ClientShell(cmd.Cmd):
             print(f"    {DIM}{km_url}{R}")
         yt = km.get("yes_token", {})
         nt = km.get("no_token", {})
-        print(f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}")
-        print(f"    NO   mid={nt.get('midpoint', 0):.4f}  bid={nt.get('best_bid', 0):.4f}  ask={nt.get('best_ask', 0):.4f}")
+        print(
+            f"    YES  mid={yt.get('midpoint', 0):.4f}  bid={yt.get('best_bid', 0):.4f}  ask={yt.get('best_ask', 0):.4f}"
+        )
+        print(
+            f"    NO   mid={nt.get('midpoint', 0):.4f}  bid={nt.get('best_bid', 0):.4f}  ask={nt.get('best_ask', 0):.4f}"
+        )
 
         print(f"\n  {B}Arb (at ask prices):{R}")
         print(f"    {kalshi_desc}  +  {poly_desc}")
@@ -236,7 +239,9 @@ class ClientShell(cmd.Cmd):
         markets = data.get("markets", [])
         mkt = markets[0] if markets else {}
         mkt_url = _market_url(mkt)
-        mkt_label = _link(mkt_url, mkt.get("question", "?")) if mkt_url else mkt.get("question", "?")
+        mkt_label = (
+            _link(mkt_url, mkt.get("question", "?")) if mkt_url else mkt.get("question", "?")
+        )
         print(f"  {B}Market:{R} {mkt_label}")
         if mkt_url:
             print(f"    {DIM}{mkt_url}{R}")
@@ -263,14 +268,14 @@ class ClientShell(cmd.Cmd):
         kind, data = self._scan_results[idx - 1]
 
         if kind == "opp":
-            print(f"{YELLOW}Single-platform execution is paper-trade only "
-                  f"(not yet supported via daemon).{R}")
+            print(
+                f"{YELLOW}Single-platform execution is paper-trade only "
+                f"(not yet supported via daemon).{R}"
+            )
             return
 
         # For matches: compute the 1-based index within just the matches
-        match_index = sum(
-            1 for k, _ in self._scan_results[:idx - 1] if k == "match"
-        ) + 1
+        match_index = sum(1 for k, _ in self._scan_results[: idx - 1] if k == "match") + 1
 
         result = self.client.execute(match_index)
         if "error" in result:

@@ -7,8 +7,9 @@ Revision ID: 001
 Revises: None
 Create Date: 2026-04-08
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 
 revision = "001"
 down_revision = None
@@ -93,7 +94,9 @@ def upgrade() -> None:
         )
 
     # Create indexes (IF NOT EXISTS is implicit — SQLite ignores dupes)
-    _safe_create_index("idx_poly_condition", "polymarket_snapshots", ["condition_id", "scan_ts"], conn)
+    _safe_create_index(
+        "idx_poly_condition", "polymarket_snapshots", ["condition_id", "scan_ts"], conn
+    )
     _safe_create_index("idx_kalshi_ticker", "kalshi_snapshots", ["ticker", "scan_ts"], conn)
     _safe_create_index("idx_poly_scan", "polymarket_snapshots", ["scan_ts"], conn)
     _safe_create_index("idx_kalshi_scan", "kalshi_snapshots", ["scan_ts"], conn)

@@ -39,7 +39,7 @@ _extra_ca = os.environ.get("SSL_CERT_FILE")
 if _extra_ca and os.path.isfile(_extra_ca):
     _SSL_CTX.load_verify_locations(_extra_ca)
 
-from polyarb.models import OrderSet
+from polyarb.models import OrderSet  # noqa: E402
 
 KALSHI_PROD = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_DEMO = "https://demo-api.kalshi.co/trade-api/v2"
@@ -59,9 +59,7 @@ class KalshiAuth:
             )
         self.api_key_id = api_key_id
         with open(private_key_path, "rb") as f:
-            self._private_key = serialization.load_pem_private_key(
-                f.read(), password=None
-            )
+            self._private_key = serialization.load_pem_private_key(f.read(), password=None)
 
     def headers(self, method: str, path: str) -> dict[str, str]:
         """Build signed headers for a Kalshi API request.
@@ -71,7 +69,7 @@ class KalshiAuth:
         """
         timestamp_ms = str(int(time.time() * 1000))
         path_clean = path.split("?")[0]
-        message = f"{timestamp_ms}{method}{path_clean}".encode("utf-8")
+        message = f"{timestamp_ms}{method}{path_clean}".encode()
 
         signature = self._private_key.sign(
             message,
@@ -112,9 +110,7 @@ class KalshiClient:
         if body is not None:
             data = json.dumps(body).encode("utf-8")
 
-        req = urllib.request.Request(
-            url, data=data, headers=headers, method=method
-        )
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=15, context=_SSL_CTX) as resp:
                 raw = resp.read()
@@ -258,8 +254,7 @@ class KalshiExecutor:
 
         if failed:
             print(
-                "\033[91m  \u26a0 Order set aborted. "
-                "Check positions for any partial fills.\033[0m"
+                "\033[91m  \u26a0 Order set aborted. Check positions for any partial fills.\033[0m"
             )
             return False
 

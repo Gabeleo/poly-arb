@@ -7,7 +7,6 @@ from polyarb.daemon.engine import _CircuitBreaker, run_scan_once
 from polyarb.daemon.state import State
 from polyarb.models import Market, Side, Token
 
-
 # ── Helpers ─────────────────────────────────────────────────
 
 
@@ -93,7 +92,7 @@ async def test_run_scan_once_dedup():
     state = State(config=Config())
 
     await run_scan_once(state, poly, kalshi)
-    first_new = len(state.matches)
+    _ = len(state.matches)
 
     # Second scan — same data, dedup should kick in
     await run_scan_once(state, poly, kalshi)
@@ -149,10 +148,12 @@ async def test_encoder_filters_false_positives():
 async def test_encoder_picks_best_match_per_poly():
     """Each Poly market gets at most one Kalshi match (highest score)."""
     poly = FakeProvider([_mkt("p1", "Will X happen?")])
-    kalshi = FakeProvider([
-        _mkt("k1", "Will X happen?", "kalshi"),
-        _mkt("k2", "X happening?", "kalshi"),
-    ])
+    kalshi = FakeProvider(
+        [
+            _mkt("k1", "Will X happen?", "kalshi"),
+            _mkt("k2", "X happening?", "kalshi"),
+        ]
+    )
     # Two pairs generated, first scores higher
     encoder = FakeEncoder(scores=[0.90, 0.60])
     state = State(config=Config())
@@ -262,23 +263,24 @@ class FakeBiEncoder:
 
         self.call_count += 1
         self.last_candidates = candidates
-        keep = candidates[:self._keep_count] if self._keep_count is not None else candidates
-        return [
-            MatchedPair(c.poly_market, c.kalshi_market, self._score)
-            for c in keep
-        ]
+        keep = candidates[: self._keep_count] if self._keep_count is not None else candidates
+        return [MatchedPair(c.poly_market, c.kalshi_market, self._score) for c in keep]
 
 
 async def test_biencoder_reduces_candidate_count():
     """Bi-encoder should filter candidates before they reach the cross-encoder."""
-    poly = FakeProvider([
-        _mkt("p1", "Will X happen?"),
-        _mkt("p2", "Will Y happen?"),
-    ])
-    kalshi = FakeProvider([
-        _mkt("k1", "Will X happen?", "kalshi"),
-        _mkt("k2", "Will Y happen?", "kalshi"),
-    ])
+    poly = FakeProvider(
+        [
+            _mkt("p1", "Will X happen?"),
+            _mkt("p2", "Will Y happen?"),
+        ]
+    )
+    kalshi = FakeProvider(
+        [
+            _mkt("k1", "Will X happen?", "kalshi"),
+            _mkt("k2", "Will Y happen?", "kalshi"),
+        ]
+    )
     # Bi-encoder keeps only 1 candidate out of the cartesian product
     biencoder = FakeBiEncoder(keep_count=1, score=0.4)
     # Encoder scores the single candidate highly
@@ -313,7 +315,7 @@ async def test_biencoder_scores_overwritten_by_crossencoder():
     poly = FakeProvider([_mkt("p1", "Will X happen?")])
     kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
     biencoder = FakeBiEncoder(score=0.4)  # bi-encoder sets confidence=0.4
-    encoder = FakeEncoder(scores=[0.92])   # cross-encoder sets confidence=0.92
+    encoder = FakeEncoder(scores=[0.92])  # cross-encoder sets confidence=0.92
     state = State(config=Config())
 
     await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)

@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -23,7 +23,7 @@ def _poly_market(
         event_slug="btc-150k",
         volume=volume,
         volume_24h=volume_24h,
-        end_date=datetime(2026, 6, 30, tzinfo=timezone.utc),
+        end_date=datetime(2026, 6, 30, tzinfo=UTC),
         platform="polymarket",
     )
 
@@ -40,11 +40,13 @@ def _kalshi_market(
         condition_id=ticker,
         question=question,
         yes_token=Token(f"{ticker}:yes", Side.YES, (yes_bid + yes_ask) / 2, yes_bid, yes_ask),
-        no_token=Token(f"{ticker}:no", Side.NO, 1 - (yes_bid + yes_ask) / 2, 1 - yes_ask, 1 - yes_bid),
+        no_token=Token(
+            f"{ticker}:no", Side.NO, 1 - (yes_bid + yes_ask) / 2, 1 - yes_ask, 1 - yes_bid
+        ),
         event_slug="KXBTC",
         volume=volume,
         volume_24h=volume_24h,
-        end_date=datetime(2026, 6, 30, tzinfo=timezone.utc),
+        end_date=datetime(2026, 6, 30, tzinfo=UTC),
         platform="kalshi",
     )
 
@@ -52,7 +54,9 @@ def _kalshi_market(
 def test_schema_creation(tmp_path):
     db = RecorderDB(tmp_path / "test.db")
     conn = sqlite3.connect(tmp_path / "test.db")
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
     assert "polymarket_snapshots" in tables
     assert "kalshi_snapshots" in tables
     conn.close()
@@ -80,7 +84,7 @@ def test_insert_kalshi(tmp_path):
 def test_filter_low_volume(tmp_path):
     db = RecorderDB(tmp_path / "test.db")
     markets = [
-        _poly_market(volume=50_000, volume_24h=100),   # passes
+        _poly_market(volume=50_000, volume_24h=100),  # passes
         _poly_market(cid="low", volume=5_000, volume_24h=100),  # below 10k floor
     ]
     count = db.insert_polymarket("2026-04-06T12:00:00Z", markets)
@@ -136,11 +140,13 @@ def test_prices_stored_correctly(tmp_path):
     db.insert_polymarket("2026-04-06T12:00:00Z", [m])
 
     conn = sqlite3.connect(tmp_path / "test.db")
-    row = conn.execute("SELECT yes_bid, yes_ask, no_bid, no_ask FROM polymarket_snapshots").fetchone()
-    assert abs(row[0] - 0.42) < 1e-9   # yes_bid
-    assert abs(row[1] - 0.44) < 1e-9   # yes_ask
-    assert abs(row[2] - 0.56) < 1e-9   # no_bid = 1 - yes_ask
-    assert abs(row[3] - 0.58) < 1e-9   # no_ask = 1 - yes_bid
+    row = conn.execute(
+        "SELECT yes_bid, yes_ask, no_bid, no_ask FROM polymarket_snapshots"
+    ).fetchone()
+    assert abs(row[0] - 0.42) < 1e-9  # yes_bid
+    assert abs(row[1] - 0.44) < 1e-9  # yes_ask
+    assert abs(row[2] - 0.56) < 1e-9  # no_bid = 1 - yes_ask
+    assert abs(row[3] - 0.58) < 1e-9  # no_ask = 1 - yes_bid
     conn.close()
     db.close()
 

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Fake SDK objects ──────────────────────────────────────────
 
@@ -65,15 +63,19 @@ def patched_poly_module():
     fake_types_mod.OrderArgs = FakeOrderArgs
     fake_types_mod.OrderType = FakeOrderType
 
-    with patch.dict(sys.modules, {
-        "py_clob_client": MagicMock(),
-        "py_clob_client.client": fake_client_mod,
-        "py_clob_client.clob_types": fake_types_mod,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "py_clob_client": MagicMock(),
+            "py_clob_client.client": fake_client_mod,
+            "py_clob_client.clob_types": fake_types_mod,
+        },
+    ):
         # Force reimport so the guard picks up the fakes
         if "polyarb.execution.polymarket" in sys.modules:
             del sys.modules["polyarb.execution.polymarket"]
         from polyarb.execution.polymarket import AsyncPolymarketClient
+
         yield AsyncPolymarketClient
 
 
@@ -108,7 +110,7 @@ async def test_create_order_passes_correct_params(patched_poly_module):
 @pytest.mark.asyncio
 async def test_cancel_order_calls_sdk(patched_poly_module):
     client = patched_poly_module("0xdeadbeef")
-    result = await client.cancel_order("0xorder123")
+    await client.cancel_order("0xorder123")
     assert client._client.cancelled == ["0xorder123"]
 
 

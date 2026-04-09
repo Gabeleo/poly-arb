@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.requests import Request
@@ -19,7 +19,7 @@ async def health(request: Request) -> JSONResponse:
     healthy = True
 
     if st.last_scan_at is not None:
-        age = (datetime.now(timezone.utc) - st.last_scan_at).total_seconds()
+        age = (datetime.now(UTC) - st.last_scan_at).total_seconds()
         max_age = st.config.scan_interval * 2 + 10
         if age > max_age:
             checks["scan_loop"] = f"stale ({age:.0f}s ago)"

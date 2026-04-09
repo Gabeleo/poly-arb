@@ -1,7 +1,6 @@
 """Tests for fee calculation functions."""
 
-from polyarb.fees import kalshi_taker_fee, poly_taker_fee, net_profit_single, net_profit_cross
-
+from polyarb.fees import kalshi_taker_fee, net_profit_cross, net_profit_single, poly_taker_fee
 
 # ── kalshi_taker_fee ───────────────────────────────────────
 

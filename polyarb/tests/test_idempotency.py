@@ -17,12 +17,14 @@ from polyarb.execution.journal import ExecutionJournal
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Market, Side, Token
 
-
 # ── Helpers ───────────────────────────────────────────────────
 
 
 def _mkt(
-    cid: str, platform: str, yes_ask: float, no_ask: float | None = None,
+    cid: str,
+    platform: str,
+    yes_ask: float,
+    no_ask: float | None = None,
 ) -> Market:
     if no_ask is None:
         no_ask = round(1.0 - yes_ask, 4)

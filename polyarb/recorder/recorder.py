@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from polyarb.data.base import AsyncDataProvider
@@ -34,7 +35,7 @@ async def record_once(
     db: RecorderDB,
 ) -> dict[str, int]:
     """Run a single scan cycle: fetch both platforms, filter, store."""
-    scan_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    scan_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     poly_markets, kalshi_markets = await asyncio.gather(
         _safe_fetch("polymarket", poly.get_active_markets()),
@@ -62,7 +63,9 @@ async def run_recorder(
 
     log.info(
         "recorder started — interval=%ds, db=%s, fetch_limit=%d",
-        interval, db_path, fetch_limit,
+        interval,
+        db_path,
+        fetch_limit,
     )
 
     loop = asyncio.get_running_loop()
@@ -81,14 +84,14 @@ async def run_recorder(
             result = await record_once(poly, kalshi, db)
             log.info(
                 "scan %s — poly=%d kalshi=%d",
-                result["scan_ts"], result["polymarket"], result["kalshi"],
+                result["scan_ts"],
+                result["polymarket"],
+                result["kalshi"],
             )
             elapsed = loop.time() - t0
             delay = max(0, interval - elapsed)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=delay)
-            except asyncio.TimeoutError:
-                pass
     except asyncio.CancelledError:
         log.info("recorder cancelled")
     finally:

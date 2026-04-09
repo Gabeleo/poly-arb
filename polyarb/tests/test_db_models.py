@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import insert, select, text
+from sqlalchemy import insert, text
+from sqlalchemy.exc import IntegrityError
 
 from polyarb.db.engine import create_engine
 from polyarb.db.models import (
@@ -62,7 +63,8 @@ def test_create_all_succeeds(engine):
     """metadata.create_all on a fresh database creates all tables."""
     with engine.connect() as conn:
         tables = {
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table'")
             ).fetchall()
         }
@@ -80,16 +82,18 @@ def test_poly_unique_constraint(engine):
         "condition_id": "0xabc",
         "question": "Test?",
         "event_slug": "test",
-        "yes_bid": 0.4, "yes_ask": 0.5,
-        "no_bid": 0.5, "no_ask": 0.6,
-        "volume": 10000, "volume_24h": 100,
+        "yes_bid": 0.4,
+        "yes_ask": 0.5,
+        "no_bid": 0.5,
+        "no_ask": 0.6,
+        "volume": 10000,
+        "volume_24h": 100,
         "end_date": None,
     }
     with engine.begin() as conn:
         conn.execute(insert(polymarket_snapshots), [row])
-    with pytest.raises(Exception):
-        with engine.begin() as conn:
-            conn.execute(insert(polymarket_snapshots), [row])
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(insert(polymarket_snapshots), [row])
 
 
 def test_kalshi_unique_constraint(engine):
@@ -99,16 +103,18 @@ def test_kalshi_unique_constraint(engine):
         "ticker": "KXBTC",
         "question": "Test?",
         "event_ticker": "KX",
-        "yes_bid": 0.4, "yes_ask": 0.5,
-        "no_bid": 0.5, "no_ask": 0.6,
-        "volume": 10000, "volume_24h": 100,
+        "yes_bid": 0.4,
+        "yes_ask": 0.5,
+        "no_bid": 0.5,
+        "no_ask": 0.6,
+        "volume": 10000,
+        "volume_24h": 100,
         "close_time": None,
     }
     with engine.begin() as conn:
         conn.execute(insert(kalshi_snapshots), [row])
-    with pytest.raises(Exception):
-        with engine.begin() as conn:
-            conn.execute(insert(kalshi_snapshots), [row])
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(insert(kalshi_snapshots), [row])
 
 
 def test_match_snapshots_unique_constraint(engine):
@@ -121,14 +127,17 @@ def test_match_snapshots_unique_constraint(engine):
         "poly_question": "BTC?",
         "kalshi_question": "Bitcoin?",
         "confidence": 0.95,
-        "poly_yes_bid": 0.4, "poly_yes_ask": 0.5,
-        "poly_no_bid": 0.5, "poly_no_ask": 0.6,
-        "kalshi_yes_bid": 0.4, "kalshi_yes_ask": 0.5,
-        "kalshi_no_bid": 0.5, "kalshi_no_ask": 0.6,
+        "poly_yes_bid": 0.4,
+        "poly_yes_ask": 0.5,
+        "poly_no_bid": 0.5,
+        "poly_no_ask": 0.6,
+        "kalshi_yes_bid": 0.4,
+        "kalshi_yes_ask": 0.5,
+        "kalshi_no_bid": 0.5,
+        "kalshi_no_ask": 0.6,
         "raw_delta": 0.01,
     }
     with engine.begin() as conn:
         conn.execute(insert(match_snapshots), [row])
-    with pytest.raises(Exception):
-        with engine.begin() as conn:
-            conn.execute(insert(match_snapshots), [row])
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(insert(match_snapshots), [row])

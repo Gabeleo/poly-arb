@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
-
 import pytest
 
 from polyarb.config import Config
 from polyarb.daemon.state import State
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Market, Side, Token
-from polyarb.notifications.approval import ApprovalManager, PendingApproval
-
+from polyarb.notifications.approval import ApprovalManager
 
 # ── Fake dependencies ──────��───────────────────────────────
 

@@ -6,8 +6,8 @@ import time
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from polyarb.observability.context import new_request_id, request_id_var
 from polyarb.observability import metrics
+from polyarb.observability.context import new_request_id
 
 
 class RequestIdMiddleware:

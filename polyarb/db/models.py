@@ -119,7 +119,9 @@ match_snapshots = SATable(
     Column("kalshi_no_ask", Float, nullable=False),
     Column("raw_delta", Float, nullable=False),
     UniqueConstraint(
-        "scan_ts", "poly_condition_id", "kalshi_ticker",
+        "scan_ts",
+        "poly_condition_id",
+        "kalshi_ticker",
         name="uq_match_snap",
     ),
 )

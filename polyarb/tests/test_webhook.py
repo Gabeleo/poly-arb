@@ -2,10 +2,9 @@
 
 from starlette.testclient import TestClient
 
-from polyarb.config import Config
 from polyarb.api.app import create_app
+from polyarb.config import Config
 from polyarb.daemon.state import State
-
 
 # ── Fakes ──────────────────────────────────────────────────
 
@@ -57,13 +56,16 @@ def test_webhook_approve():
     bot = FakeBot()
     client = _make_client(approval_manager=mgr, telegram_bot=bot)
 
-    resp = client.post("/telegram/webhook", json={
-        "callback_query": {
-            "id": "cb_1",
-            "data": "approve:appr_123",
-            "from": {"id": 999},
-        }
-    })
+    resp = client.post(
+        "/telegram/webhook",
+        json={
+            "callback_query": {
+                "id": "cb_1",
+                "data": "approve:appr_123",
+                "from": {"id": 999},
+            }
+        },
+    )
 
     assert resp.status_code == 200
     assert "appr_123" in mgr.approved
@@ -74,13 +76,16 @@ def test_webhook_reject():
     bot = FakeBot()
     client = _make_client(approval_manager=mgr, telegram_bot=bot)
 
-    resp = client.post("/telegram/webhook", json={
-        "callback_query": {
-            "id": "cb_2",
-            "data": "reject:appr_456",
-            "from": {"id": 999},
-        }
-    })
+    resp = client.post(
+        "/telegram/webhook",
+        json={
+            "callback_query": {
+                "id": "cb_2",
+                "data": "reject:appr_456",
+                "from": {"id": 999},
+            }
+        },
+    )
 
     assert resp.status_code == 200
     assert "appr_456" in mgr.rejected
@@ -91,9 +96,7 @@ def test_webhook_no_callback_query():
     bot = FakeBot()
     client = _make_client(approval_manager=mgr, telegram_bot=bot)
 
-    resp = client.post("/telegram/webhook", json={
-        "message": {"text": "hello"}
-    })
+    resp = client.post("/telegram/webhook", json={"message": {"text": "hello"}})
 
     assert resp.status_code == 200
     assert mgr.approved == []
@@ -105,13 +108,16 @@ def test_webhook_invalid_callback_data():
     bot = FakeBot()
     client = _make_client(approval_manager=mgr, telegram_bot=bot)
 
-    resp = client.post("/telegram/webhook", json={
-        "callback_query": {
-            "id": "cb_3",
-            "data": "garbage",
-            "from": {"id": 999},
-        }
-    })
+    resp = client.post(
+        "/telegram/webhook",
+        json={
+            "callback_query": {
+                "id": "cb_3",
+                "data": "garbage",
+                "from": {"id": 999},
+            }
+        },
+    )
 
     assert resp.status_code == 200
     assert mgr.approved == []
@@ -121,13 +127,16 @@ def test_webhook_invalid_callback_data():
 def test_webhook_not_configured():
     client = _make_client()  # no approval_manager, no telegram_bot
 
-    resp = client.post("/telegram/webhook", json={
-        "callback_query": {
-            "id": "cb_4",
-            "data": "approve:appr_789",
-            "from": {"id": 999},
-        }
-    })
+    resp = client.post(
+        "/telegram/webhook",
+        json={
+            "callback_query": {
+                "id": "cb_4",
+                "data": "approve:appr_789",
+                "from": {"id": 999},
+            }
+        },
+    )
 
     assert resp.status_code == 200
 
@@ -137,22 +146,27 @@ def test_webhook_scan_command():
 
     def _mkt(cid):
         return Market(
-            condition_id=cid, question=f"Will {cid} happen?",
-            yes_token=Token(token_id=f"{cid}:y", side=Side.YES, midpoint=0.6, best_bid=0.59, best_ask=0.61),
-            no_token=Token(token_id=f"{cid}:n", side=Side.NO, midpoint=0.4, best_bid=0.39, best_ask=0.41),
+            condition_id=cid,
+            question=f"Will {cid} happen?",
+            yes_token=Token(
+                token_id=f"{cid}:y", side=Side.YES, midpoint=0.6, best_bid=0.59, best_ask=0.61
+            ),
+            no_token=Token(
+                token_id=f"{cid}:n", side=Side.NO, midpoint=0.4, best_bid=0.39, best_ask=0.41
+            ),
         )
 
     state = State(config=Config())
     state.opportunities = [
-        Opportunity(arb_type=ArbType.SINGLE_UNDERPRICE, markets=(_mkt("a"),), expected_profit_per_share=0.03),
+        Opportunity(
+            arb_type=ArbType.SINGLE_UNDERPRICE, markets=(_mkt("a"),), expected_profit_per_share=0.03
+        ),
     ]
 
     bot = FakeBot()
     client = _make_client(telegram_bot=bot, state=state)
 
-    resp = client.post("/telegram/webhook", json={
-        "message": {"text": "/scan"}
-    })
+    resp = client.post("/telegram/webhook", json={"message": {"text": "/scan"}})
 
     assert resp.status_code == 200
     assert len(bot.digests) == 1
@@ -162,8 +176,6 @@ def test_webhook_scan_command():
 def test_webhook_scan_command_no_bot():
     client = _make_client()  # no bot configured
 
-    resp = client.post("/telegram/webhook", json={
-        "message": {"text": "/scan"}
-    })
+    resp = client.post("/telegram/webhook", json={"message": {"text": "/scan"}})
 
     assert resp.status_code == 200

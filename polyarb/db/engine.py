@@ -30,6 +30,7 @@ def create_engine(url: str | None = None) -> Engine:
     engine = _sa_create_engine(url)
 
     if _is_sqlite(url):
+
         @event.listens_for(engine, "connect")
         def _set_sqlite_pragmas(dbapi_connection, connection_record):
             cursor = dbapi_connection.cursor()

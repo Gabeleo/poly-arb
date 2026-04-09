@@ -7,8 +7,9 @@ Revision ID: 002
 Revises: 001
 Create Date: 2026-04-08
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 
 revision = "002"
 down_revision = "001"
@@ -37,13 +38,16 @@ def upgrade() -> None:
         sa.Column("kalshi_no_ask", sa.Float, nullable=False),
         sa.Column("raw_delta", sa.Float, nullable=False),
         sa.UniqueConstraint(
-            "scan_ts", "poly_condition_id", "kalshi_ticker",
+            "scan_ts",
+            "poly_condition_id",
+            "kalshi_ticker",
             name="uq_match_snap",
         ),
     )
     op.create_index("idx_match_snap_scan", "match_snapshots", ["scan_ts"])
     op.create_index(
-        "idx_match_snap_pair", "match_snapshots",
+        "idx_match_snap_pair",
+        "match_snapshots",
         ["poly_condition_id", "kalshi_ticker"],
     )
 

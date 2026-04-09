@@ -2,12 +2,11 @@
 
 from starlette.testclient import TestClient
 
-from polyarb.config import Config
 from polyarb.api.app import create_app
+from polyarb.config import Config
 from polyarb.daemon.state import State
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import ArbType, Market, Opportunity, Side, Token
-
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -274,7 +273,7 @@ def test_ws_connect_and_disconnect():
 
     assert len(state.ws_clients) == 0
 
-    with client.websocket_connect("/ws") as ws:
+    with client.websocket_connect("/ws") as _ws:
         # After connect, the client should be tracked
         assert len(state.ws_clients) == 1
 

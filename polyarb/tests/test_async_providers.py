@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
-
 
 # ── Polymarket mock data ──────────────────────────────────────
 
@@ -196,7 +193,9 @@ async def test_kalshi_get_active_markets():
     from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 
     transport = httpx.MockTransport(kalshi_handler)
-    client = httpx.AsyncClient(transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2")
+    client = httpx.AsyncClient(
+        transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2"
+    )
     provider = AsyncKalshiDataProvider(limit=100, client=client)
     markets = await provider.get_active_markets()
 
@@ -214,7 +213,9 @@ async def test_kalshi_neg_risk_detection():
     from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 
     transport = httpx.MockTransport(kalshi_handler)
-    client = httpx.AsyncClient(transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2")
+    client = httpx.AsyncClient(
+        transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2"
+    )
     provider = AsyncKalshiDataProvider(limit=100, client=client)
     markets = await provider.get_active_markets()
 
@@ -234,7 +235,9 @@ async def test_kalshi_get_events():
     from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 
     transport = httpx.MockTransport(kalshi_handler)
-    client = httpx.AsyncClient(transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2")
+    client = httpx.AsyncClient(
+        transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2"
+    )
     provider = AsyncKalshiDataProvider(limit=100, client=client)
     events = await provider.get_events()
 
@@ -251,7 +254,9 @@ async def test_kalshi_search_markets():
     from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 
     transport = httpx.MockTransport(kalshi_handler)
-    client = httpx.AsyncClient(transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2")
+    client = httpx.AsyncClient(
+        transport=transport, base_url="https://api.elections.kalshi.com/trade-api/v2"
+    )
     provider = AsyncKalshiDataProvider(limit=100, client=client)
     results = await provider.search_markets("Rain", limit=5)
 

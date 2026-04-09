@@ -13,7 +13,6 @@ from polyarb.api.schemas.responses import (
     StatusResponse,
 )
 
-
 # ── ConfigUpdate ────────────────────────────────────────────
 
 
@@ -82,19 +81,32 @@ def test_health_response():
 
 def test_status_response():
     r = StatusResponse(
-        uptime_seconds=100.0, scan_count=5, connected_clients=2,
-        match_count=10, opportunity_count=3, kelly_enabled=True,
-        bankroll=1000.0, kelly_fraction=0.5, biencoder_enabled=False,
+        uptime_seconds=100.0,
+        scan_count=5,
+        connected_clients=2,
+        match_count=10,
+        opportunity_count=3,
+        kelly_enabled=True,
+        bankroll=1000.0,
+        kelly_fraction=0.5,
+        biencoder_enabled=False,
     )
     assert r.scan_count == 5
 
 
 def test_config_response():
     r = ConfigResponse(
-        min_profit=0.005, max_prob=0.95, scan_interval=10.0,
-        order_size=10.0, kelly_fraction=0.5, max_position=100.0,
-        bankroll=0.0, dedup_window=60, approval_timeout=120.0,
-        digest_interval=3600.0, match_candidate_threshold=0.15,
+        min_profit=0.005,
+        max_prob=0.95,
+        scan_interval=10.0,
+        order_size=10.0,
+        kelly_fraction=0.5,
+        max_position=100.0,
+        bankroll=0.0,
+        dedup_window=60,
+        approval_timeout=120.0,
+        digest_interval=3600.0,
+        match_candidate_threshold=0.15,
         match_final_threshold=0.5,
     )
     assert r.min_profit == 0.005

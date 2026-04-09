@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-from polyarb.analysis.costs import ArbResult, FeeParams, compute_arb, is_profitable
+from polyarb.analysis.costs import FeeParams, compute_arb, is_profitable
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ def _days_between(ts1: str, ts2: str) -> float:
 def run_backtest(
     db_path: str | Path,
     pairs: list[tuple[str, str]],
-    fees: FeeParams = FeeParams(),
+    fees: FeeParams | None = None,
     repo=None,
 ) -> BacktestResult:
     """Run the backtest over all matched pairs.
@@ -131,6 +131,8 @@ def run_backtest(
     If *repo* is provided (a SnapshotRepository), uses it directly.
     Otherwise, creates one from *db_path*.
     """
+    if fees is None:
+        fees = FeeParams()
     if repo is None:
         from polyarb.db.engine import create_engine
         from polyarb.db.repositories.snapshots import SqliteSnapshotRepository
@@ -151,10 +153,7 @@ def run_backtest(
 
     for scan_ts in all_scans:
         # Compute capital-in-use at this scan
-        capital = sum(
-            t.total_cost for t in active_trades
-            if t.settlement_date >= scan_ts
-        )
+        capital = sum(t.total_cost for t in active_trades if t.settlement_date >= scan_ts)
         result.capital_curve.append((scan_ts, capital))
 
         # Evaluate each pair
@@ -221,14 +220,14 @@ def format_report(result: BacktestResult) -> str:
     lines.append(f"Return on max capital: {result.return_on_max_capital:.2%}")
     lines.append(f"Max drawdown (P&L):    ${result.max_drawdown:.4f}")
     lines.append("")
-    lines.append(f"Days to settlement:")
+    lines.append("Days to settlement:")
     lines.append(f"  Mean:   {result.avg_days_to_settlement:.1f} days")
     lines.append(f"  Median: {result.median_days_to_settlement:.1f} days")
     lines.append("")
 
     if result.trades:
         profits = result.profits
-        lines.append(f"Profit distribution:")
+        lines.append("Profit distribution:")
         lines.append(f"  Min:    ${min(profits):.4f}")
         lines.append(f"  Median: ${statistics.median(profits):.4f}")
         lines.append(f"  Max:    ${max(profits):.4f}")
@@ -241,10 +240,12 @@ def format_report(result: BacktestResult) -> str:
             pair_profits.setdefault(key, []).append(t.net_profit)
 
         lines.append("-" * 65)
-        lines.append(f"{'Pair (Poly CID)':20s} | {'Trades':>6s} | {'Total P&L':>10s} | {'Avg':>8s} | {'Days':>5s}")
+        lines.append(
+            f"{'Pair (Poly CID)':20s} | {'Trades':>6s} | {'Total P&L':>10s} | {'Avg':>8s} | {'Days':>5s}"
+        )
         lines.append("-" * 65)
 
-        for (pcid, ktick), profits_list in sorted(
+        for (pcid, _ktick), profits_list in sorted(
             pair_profits.items(), key=lambda x: sum(x[1]), reverse=True
         ):
             total = sum(profits_list)
@@ -253,7 +254,9 @@ def format_report(result: BacktestResult) -> str:
             pair_trades = [t for t in result.trades if t.poly_cid == pcid]
             avg_days = statistics.mean(t.days_to_settlement for t in pair_trades)
             label = f"...{pcid[-8:]}"
-            lines.append(f"{label:20s} | {len(profits_list):6d} | ${total:9.4f} | ${avg:7.4f} | {avg_days:5.1f}")
+            lines.append(
+                f"{label:20s} | {len(profits_list):6d} | ${total:9.4f} | ${avg:7.4f} | {avg_days:5.1f}"
+            )
 
     lines.append("=" * 65)
     return "\n".join(lines)

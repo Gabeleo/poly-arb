@@ -10,6 +10,8 @@ Polyarb is a cross-platform prediction market arbitrage system. The core thesis:
 
 Self-verify all work by testing end to end. Do not return control until requirements are met and working as expected.
 
+When `/stash` is referenced, it refers to `docs/stash/` in this repo.
+
 ## Commands
 
 ```bash

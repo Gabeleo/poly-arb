@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from polyarb.models import Opportunity
 from polyarb.execution.orders import OrderSet
+from polyarb.models import Opportunity
 
 
 class Alerter(Protocol):

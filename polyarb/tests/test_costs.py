@@ -1,14 +1,12 @@
 """Tests for cross-platform arbitrage cost model."""
 
 from polyarb.analysis.costs import (
-    ArbResult,
     FeeParams,
     compute_arb,
     is_profitable,
     kalshi_entry_fee,
     poly_taker_fee,
 )
-
 
 # ── Fee calculations ──────────────────────────────────────────
 

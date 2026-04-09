@@ -29,9 +29,7 @@ class EncoderClient:
             self._client = httpx.AsyncClient(timeout=60.0)
             self._owns_client = True
 
-    async def score_pairs(
-        self, pairs: list[tuple[str, str]]
-    ) -> list[float] | None:
+    async def score_pairs(self, pairs: list[tuple[str, str]]) -> list[float] | None:
         """Send pairs to the encoder service and return similarity scores.
 
         Returns ``None`` on any error (HTTP, connection, malformed response).

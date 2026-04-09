@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import time
 
-
 BUCKET_SECONDS = 60
 
 

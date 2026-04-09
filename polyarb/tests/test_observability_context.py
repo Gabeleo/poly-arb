@@ -46,9 +46,11 @@ async def test_context_isolation_across_tasks():
 
     async def worker(name: str):
         ctx = contextvars.copy_context()
+
         def _inner():
             sid = new_scan_id()
             results[name] = sid
+
         ctx.run(_inner)
 
     t1 = asyncio.create_task(worker("a"))

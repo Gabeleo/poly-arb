@@ -1,13 +1,11 @@
 """Tests for polyarb.daemon.state.State."""
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 
 from polyarb.config import Config
 from polyarb.daemon.state import State
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import ArbType, Market, Opportunity, Side, Token
-
 
 # ── Helpers ─────────────────────────────────────────────────
 

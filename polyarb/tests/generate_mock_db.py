@@ -18,7 +18,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import math
 import random
 import sqlite3
 import sys
@@ -41,6 +40,7 @@ BATCH_SIZE = 5000  # rows per executemany for performance
 
 
 # ── Market definitions ────────────────────────────────────────
+
 
 @dataclass
 class MarketDef:
@@ -73,55 +73,110 @@ class MatchedPairDef:
 
 
 def _make_poly(
-    idx: int, question: str, slug: str, base_price: float,
-    volume: float = 500_000, end: str = "2026-06-30T00:00:00+00:00",
+    idx: int,
+    question: str,
+    slug: str,
+    base_price: float,
+    volume: float = 500_000,
+    end: str = "2026-06-30T00:00:00+00:00",
     **kwargs,
 ) -> MarketDef:
     cid = f"0x{idx:04d}{'a' * 36}"[:42]
     return MarketDef(
-        id=cid, question=question, event_slug=slug,
-        base_price=base_price, spread=0.01,
-        volume=volume, volume_24h_base=volume * 0.03,
-        end_date=end, platform="polymarket", **kwargs,
+        id=cid,
+        question=question,
+        event_slug=slug,
+        base_price=base_price,
+        spread=0.01,
+        volume=volume,
+        volume_24h_base=volume * 0.03,
+        end_date=end,
+        platform="polymarket",
+        **kwargs,
     )
 
 
 def _make_kalshi(
-    idx: int, question: str, event_ticker: str, base_price: float,
-    volume: float = 30_000, end: str = "2026-06-30T00:00:00+00:00",
+    idx: int,
+    question: str,
+    event_ticker: str,
+    base_price: float,
+    volume: float = 30_000,
+    end: str = "2026-06-30T00:00:00+00:00",
     **kwargs,
 ) -> MarketDef:
     ticker = f"KX{event_ticker}-{idx:03d}"
     return MarketDef(
-        id=ticker, question=question, event_slug=event_ticker,
-        base_price=base_price, spread=0.02,
-        volume=volume, volume_24h_base=volume * 0.05,
-        end_date=end, platform="kalshi", **kwargs,
+        id=ticker,
+        question=question,
+        event_slug=event_ticker,
+        base_price=base_price,
+        spread=0.02,
+        volume=volume,
+        volume_24h_base=volume * 0.05,
+        end_date=end,
+        platform="kalshi",
+        **kwargs,
     )
 
 
-def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list[MarketDef]]:
+def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list[MarketDef]]:  # noqa: C901
     """Define all markets and their behaviors."""
     matched_pairs: list[MatchedPairDef] = []
 
     # ── 5 profitable arb pairs ────────────────────────────────
     # These have windows where delta > ~4¢ (enough to survive fees)
     profitable_specs = [
-        ("Will Bitcoin exceed $150,000 by June 30?", "Bitcoin above $150,000?",
-         "will-bitcoin-exceed-150000-by-june-30", "BTC150K",
-         0.42, 0.40, 1_200_000, 50_000),
-        ("Will ETH hit $10,000 by end of 2026?", "Ethereum above $10,000?",
-         "will-eth-hit-10000-by-end-of-2026", "ETH10K",
-         0.28, 0.25, 800_000, 35_000),
-        ("Will the Fed cut rates in March 2026?", "Fed rate cut in March 2026?",
-         "will-the-fed-cut-rates-in-march-2026", "FEDMAR26",
-         0.65, 0.62, 3_000_000, 80_000),
-        ("Will Trump win 2028 Republican nomination?", "Trump 2028 GOP nominee?",
-         "will-trump-win-2028-republican-nomination", "TRUMP28",
-         0.55, 0.52, 5_000_000, 120_000),
-        ("Will SpaceX Starship reach orbit by April 2026?", "SpaceX Starship orbital by April 2026?",
-         "will-spacex-starship-reach-orbit-by-april-2026", "SPACEX26",
-         0.70, 0.67, 600_000, 25_000),
+        (
+            "Will Bitcoin exceed $150,000 by June 30?",
+            "Bitcoin above $150,000?",
+            "will-bitcoin-exceed-150000-by-june-30",
+            "BTC150K",
+            0.42,
+            0.40,
+            1_200_000,
+            50_000,
+        ),
+        (
+            "Will ETH hit $10,000 by end of 2026?",
+            "Ethereum above $10,000?",
+            "will-eth-hit-10000-by-end-of-2026",
+            "ETH10K",
+            0.28,
+            0.25,
+            800_000,
+            35_000,
+        ),
+        (
+            "Will the Fed cut rates in March 2026?",
+            "Fed rate cut in March 2026?",
+            "will-the-fed-cut-rates-in-march-2026",
+            "FEDMAR26",
+            0.65,
+            0.62,
+            3_000_000,
+            80_000,
+        ),
+        (
+            "Will Trump win 2028 Republican nomination?",
+            "Trump 2028 GOP nominee?",
+            "will-trump-win-2028-republican-nomination",
+            "TRUMP28",
+            0.55,
+            0.52,
+            5_000_000,
+            120_000,
+        ),
+        (
+            "Will SpaceX Starship reach orbit by April 2026?",
+            "SpaceX Starship orbital by April 2026?",
+            "will-spacex-starship-reach-orbit-by-april-2026",
+            "SPACEX26",
+            0.70,
+            0.67,
+            600_000,
+            25_000,
+        ),
     ]
 
     for i, (pq, kq, slug, kticker, p_price, k_price, pvol, kvol) in enumerate(profitable_specs):
@@ -130,7 +185,7 @@ def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list
         rng = random.Random(SEED + i)
         windows = []
         n_windows = rng.randint(2, 4)
-        for w in range(n_windows):
+        for _w in range(n_windows):
             day = rng.randint(0, 6)
             hour = rng.randint(0, 20)
             start_scan = (day * 24 + hour) * 120  # scans per hour = 120
@@ -144,30 +199,53 @@ def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list
         for w in windows[1:]:
             if w[0] > clean[-1][1] + 120:  # gap of at least 1 hour
                 clean.append(w)
-        matched_pairs.append(MatchedPairDef(
-            poly=_make_poly(i, pq, slug, p_price, volume=pvol),
-            kalshi=_make_kalshi(i, kq, kticker, k_price, volume=kvol),
-            arb_type="profitable",
-            arb_windows=clean,
-        ))
+        matched_pairs.append(
+            MatchedPairDef(
+                poly=_make_poly(i, pq, slug, p_price, volume=pvol),
+                kalshi=_make_kalshi(i, kq, kticker, k_price, volume=kvol),
+                arb_type="profitable",
+                arb_windows=clean,
+            )
+        )
 
     # ── 3 false positive pairs (small delta, fees eat it) ─────
     false_pos_specs = [
-        ("Will GTA VI release in 2026?", "GTA VI 2026 release?",
-         "will-gta-vi-release-in-2026", "GTA6",
-         0.45, 0.44, 400_000, 20_000),
-        ("Will US GDP growth exceed 3% in Q2 2026?", "US GDP above 3% Q2 2026?",
-         "will-us-gdp-growth-exceed-3-percent-q2-2026", "GDPQ2",
-         0.35, 0.34, 250_000, 15_000),
-        ("Will AI pass the Turing test by 2027?", "AI Turing test by 2027?",
-         "will-ai-pass-turing-test-by-2027", "AITURING",
-         0.20, 0.19, 300_000, 18_000),
+        (
+            "Will GTA VI release in 2026?",
+            "GTA VI 2026 release?",
+            "will-gta-vi-release-in-2026",
+            "GTA6",
+            0.45,
+            0.44,
+            400_000,
+            20_000,
+        ),
+        (
+            "Will US GDP growth exceed 3% in Q2 2026?",
+            "US GDP above 3% Q2 2026?",
+            "will-us-gdp-growth-exceed-3-percent-q2-2026",
+            "GDPQ2",
+            0.35,
+            0.34,
+            250_000,
+            15_000,
+        ),
+        (
+            "Will AI pass the Turing test by 2027?",
+            "AI Turing test by 2027?",
+            "will-ai-pass-turing-test-by-2027",
+            "AITURING",
+            0.20,
+            0.19,
+            300_000,
+            18_000,
+        ),
     ]
 
     for i, (pq, kq, slug, kticker, p_price, k_price, pvol, kvol) in enumerate(false_pos_specs):
         rng = random.Random(SEED + 100 + i)
         windows = []
-        for w in range(3):
+        for _w in range(3):
             day = rng.randint(0, 6)
             hour = rng.randint(0, 20)
             start_scan = (day * 24 + hour) * 120
@@ -180,57 +258,98 @@ def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list
         for w in windows[1:]:
             if w[0] > clean[-1][1] + 120:
                 clean.append(w)
-        matched_pairs.append(MatchedPairDef(
-            poly=_make_poly(5 + i, pq, slug, p_price, volume=pvol),
-            kalshi=_make_kalshi(5 + i, kq, kticker, k_price, volume=kvol),
-            arb_type="false_positive",
-            arb_windows=clean,
-        ))
+        matched_pairs.append(
+            MatchedPairDef(
+                poly=_make_poly(5 + i, pq, slug, p_price, volume=pvol),
+                kalshi=_make_kalshi(5 + i, kq, kticker, k_price, volume=kvol),
+                arb_type="false_positive",
+                arb_windows=clean,
+            )
+        )
 
     # ── 2 stable matched pairs (no arb) ──────────────────────
     stable_specs = [
-        ("Will there be a US government shutdown in 2026?", "US government shutdown 2026?",
-         "will-there-be-us-government-shutdown-2026", "GOVSHUT26",
-         0.30, 0.30, 1_500_000, 40_000),
-        ("Will the S&P 500 close above 6000 by June 2026?", "S&P 500 above 6000 by June 2026?",
-         "will-sp-500-close-above-6000-by-june-2026", "SP6000",
-         0.60, 0.60, 2_000_000, 60_000),
+        (
+            "Will there be a US government shutdown in 2026?",
+            "US government shutdown 2026?",
+            "will-there-be-us-government-shutdown-2026",
+            "GOVSHUT26",
+            0.30,
+            0.30,
+            1_500_000,
+            40_000,
+        ),
+        (
+            "Will the S&P 500 close above 6000 by June 2026?",
+            "S&P 500 above 6000 by June 2026?",
+            "will-sp-500-close-above-6000-by-june-2026",
+            "SP6000",
+            0.60,
+            0.60,
+            2_000_000,
+            60_000,
+        ),
     ]
 
     for i, (pq, kq, slug, kticker, p_price, k_price, pvol, kvol) in enumerate(stable_specs):
-        matched_pairs.append(MatchedPairDef(
-            poly=_make_poly(8 + i, pq, slug, p_price, volume=pvol),
-            kalshi=_make_kalshi(8 + i, kq, kticker, k_price, volume=kvol),
-            arb_type="stable",
-            arb_windows=[],
-        ))
+        matched_pairs.append(
+            MatchedPairDef(
+                poly=_make_poly(8 + i, pq, slug, p_price, volume=pvol),
+                kalshi=_make_kalshi(8 + i, kq, kticker, k_price, volume=kvol),
+                arb_type="stable",
+                arb_windows=[],
+            )
+        )
 
     # ── 30 unmatched Polymarket markets (noise) ──────────────
     noise_poly: list[MarketDef] = []
     noise_topics = [
-        "Super Bowl LXII winner", "Oscar Best Picture 2027", "Next UK Prime Minister",
-        "Mars mission by 2030", "NYC mayor 2029", "California earthquake M7+ 2026",
-        "Taylor Swift album 2026", "Tesla stock above $500", "Netflix subscribers 300M",
-        "Dogecoin above $1", "US inflation below 2%", "Amazon stock split 2026",
-        "World Cup 2026 winner", "Next Supreme Court vacancy", "TikTok banned in US",
-        "Apple car announced", "Nuclear fusion breakeven 2027", "UFO disclosure 2026",
-        "Olympics 2028 boycott", "Minimum wage $20 federal", "Student loan forgiveness",
-        "Bitcoin ETF $100B AUM", "Lab-grown meat FDA approved", "Self-driving taxi nationwide",
-        "Twitter/X profitable 2026", "Disney+ subscriber loss", "ChatGPT-5 released 2026",
-        "Hyperloop operational", "Commercial space tourism 1000 passengers", "Quantum supremacy 2027",
+        "Super Bowl LXII winner",
+        "Oscar Best Picture 2027",
+        "Next UK Prime Minister",
+        "Mars mission by 2030",
+        "NYC mayor 2029",
+        "California earthquake M7+ 2026",
+        "Taylor Swift album 2026",
+        "Tesla stock above $500",
+        "Netflix subscribers 300M",
+        "Dogecoin above $1",
+        "US inflation below 2%",
+        "Amazon stock split 2026",
+        "World Cup 2026 winner",
+        "Next Supreme Court vacancy",
+        "TikTok banned in US",
+        "Apple car announced",
+        "Nuclear fusion breakeven 2027",
+        "UFO disclosure 2026",
+        "Olympics 2028 boycott",
+        "Minimum wage $20 federal",
+        "Student loan forgiveness",
+        "Bitcoin ETF $100B AUM",
+        "Lab-grown meat FDA approved",
+        "Self-driving taxi nationwide",
+        "Twitter/X profitable 2026",
+        "Disney+ subscriber loss",
+        "ChatGPT-5 released 2026",
+        "Hyperloop operational",
+        "Commercial space tourism 1000 passengers",
+        "Quantum supremacy 2027",
     ]
     for i, topic in enumerate(noise_topics):
         rng = random.Random(SEED + 200 + i)
         base_p = rng.uniform(0.10, 0.90)
         vol = rng.uniform(15_000, 4_000_000)
-        noise_poly.append(_make_poly(
-            10 + i, f"Will {topic}?",
-            topic.lower().replace(" ", "-").replace("/", "-"),
-            base_price=round(base_p, 2),
-            volume=round(vol, -3),
-            volatility=rng.uniform(0.002, 0.010),
-            drift_per_day=rng.uniform(-0.005, 0.005),
-        ))
+        noise_poly.append(
+            _make_poly(
+                10 + i,
+                f"Will {topic}?",
+                topic.lower().replace(" ", "-").replace("/", "-"),
+                base_price=round(base_p, 2),
+                volume=round(vol, -3),
+                volatility=rng.uniform(0.002, 0.010),
+                drift_per_day=rng.uniform(-0.005, 0.005),
+            )
+        )
 
     # ─�� 5 unmatched Kalshi markets (noise) ────────────────────
     noise_kalshi: list[MarketDef] = []
@@ -241,22 +360,27 @@ def build_market_universe() -> tuple[list[MatchedPairDef], list[MarketDef], list
         ("CPI-26APR", "April 2026 CPI above 3%?", "CPI"),
         ("GOLD-26Q2", "Gold above $3000 Q2 2026?", "GOLD"),
     ]
-    for i, (ticker, question, evt) in enumerate(kalshi_noise_topics):
+    for i, (_ticker, question, evt) in enumerate(kalshi_noise_topics):
         rng = random.Random(SEED + 300 + i)
         base_p = rng.uniform(0.15, 0.85)
         vol = rng.uniform(10_000, 80_000)
-        noise_kalshi.append(_make_kalshi(
-            10 + i, question, evt,
-            base_price=round(base_p, 2),
-            volume=round(vol, -3),
-            volatility=rng.uniform(0.003, 0.012),
-            drift_per_day=rng.uniform(-0.005, 0.005),
-        ))
+        noise_kalshi.append(
+            _make_kalshi(
+                10 + i,
+                question,
+                evt,
+                base_price=round(base_p, 2),
+                volume=round(vol, -3),
+                volatility=rng.uniform(0.003, 0.012),
+                drift_per_day=rng.uniform(-0.005, 0.005),
+            )
+        )
 
     return matched_pairs, noise_poly, noise_kalshi
 
 
 # ── Price simulation ──────────────────────────────────────────
+
 
 def simulate_price_solo(
     mkt: MarketDef,
@@ -371,6 +495,7 @@ def simulate_matched_pair(
 
 # ── Row generation ────────────────────────────────────────────
 
+
 def scan_ts_at(scan_idx: int) -> str:
     """ISO timestamp for the given scan index (0-based from START_TS)."""
     # 2026-03-01T00:00:00Z + scan_idx * 30 seconds
@@ -402,43 +527,86 @@ def generate_rows(
         # ── Matched pairs (correlated prices) ─────────────────
         for pair in matched_pairs:
             p_prices, k_prices = simulate_matched_pair(
-                pair, scan_idx, rng, price_state,
+                pair,
+                scan_idx,
+                rng,
+                price_state,
             )
 
             # Volume jitter (+-20%)
             p_vol24 = round(pair.poly.volume_24h_base * rng.uniform(0.8, 1.2), 2)
             k_vol24 = round(pair.kalshi.volume_24h_base * rng.uniform(0.8, 1.2), 2)
 
-            poly_rows.append((
-                ts, pair.poly.id, pair.poly.question, pair.poly.event_slug,
-                p_prices[0], p_prices[1], p_prices[2], p_prices[3],
-                pair.poly.volume, p_vol24, pair.poly.end_date,
-            ))
-            kalshi_rows.append((
-                ts, pair.kalshi.id, pair.kalshi.question, pair.kalshi.event_slug,
-                k_prices[0], k_prices[1], k_prices[2], k_prices[3],
-                pair.kalshi.volume, k_vol24, pair.kalshi.end_date,
-            ))
+            poly_rows.append(
+                (
+                    ts,
+                    pair.poly.id,
+                    pair.poly.question,
+                    pair.poly.event_slug,
+                    p_prices[0],
+                    p_prices[1],
+                    p_prices[2],
+                    p_prices[3],
+                    pair.poly.volume,
+                    p_vol24,
+                    pair.poly.end_date,
+                )
+            )
+            kalshi_rows.append(
+                (
+                    ts,
+                    pair.kalshi.id,
+                    pair.kalshi.question,
+                    pair.kalshi.event_slug,
+                    k_prices[0],
+                    k_prices[1],
+                    k_prices[2],
+                    k_prices[3],
+                    pair.kalshi.volume,
+                    k_vol24,
+                    pair.kalshi.end_date,
+                )
+            )
 
         # ── Noise poly (independent prices) ───────────────────
         for mkt in noise_poly:
             prices = simulate_price_solo(mkt, rng, price_state)
             vol24 = round(mkt.volume_24h_base * rng.uniform(0.8, 1.2), 2)
-            poly_rows.append((
-                ts, mkt.id, mkt.question, mkt.event_slug,
-                prices[0], prices[1], prices[2], prices[3],
-                mkt.volume, vol24, mkt.end_date,
-            ))
+            poly_rows.append(
+                (
+                    ts,
+                    mkt.id,
+                    mkt.question,
+                    mkt.event_slug,
+                    prices[0],
+                    prices[1],
+                    prices[2],
+                    prices[3],
+                    mkt.volume,
+                    vol24,
+                    mkt.end_date,
+                )
+            )
 
         # ── Noise kalshi ─────────���─────────────────────────���──
         for mkt in noise_kalshi:
             prices = simulate_price_solo(mkt, rng, price_state)
             vol24 = round(mkt.volume_24h_base * rng.uniform(0.8, 1.2), 2)
-            kalshi_rows.append((
-                ts, mkt.id, mkt.question, mkt.event_slug,
-                prices[0], prices[1], prices[2], prices[3],
-                mkt.volume, vol24, mkt.end_date,
-            ))
+            kalshi_rows.append(
+                (
+                    ts,
+                    mkt.id,
+                    mkt.question,
+                    mkt.event_slug,
+                    prices[0],
+                    prices[1],
+                    prices[2],
+                    prices[3],
+                    mkt.volume,
+                    vol24,
+                    mkt.end_date,
+                )
+            )
 
         # Progress
         if scan_idx % 2880 == 0:  # every ~day
@@ -449,6 +617,7 @@ def generate_rows(
 
 
 # ── Database writing ────────���─────────────────────────────────
+
 
 def write_db(path: Path, poly_rows: list[tuple], kalshi_rows: list[tuple]) -> None:
     """Write rows to SQLite using the real schema."""
@@ -473,12 +642,12 @@ def write_db(path: Path, poly_rows: list[tuple], kalshi_rows: list[tuple]) -> No
 
     print(f"  writing {len(poly_rows):,} polymarket rows...")
     for i in range(0, len(poly_rows), BATCH_SIZE):
-        conn.executemany(poly_sql, poly_rows[i:i + BATCH_SIZE])
+        conn.executemany(poly_sql, poly_rows[i : i + BATCH_SIZE])
     conn.commit()
 
     print(f"  writing {len(kalshi_rows):,} kalshi rows...")
     for i in range(0, len(kalshi_rows), BATCH_SIZE):
-        conn.executemany(kalshi_sql, kalshi_rows[i:i + BATCH_SIZE])
+        conn.executemany(kalshi_sql, kalshi_rows[i : i + BATCH_SIZE])
     conn.commit()
 
     conn.close()
@@ -486,10 +655,14 @@ def write_db(path: Path, poly_rows: list[tuple], kalshi_rows: list[tuple]) -> No
 
 # ── Main ──────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate mock snapshot database")
     parser.add_argument(
-        "--output", "-o", type=str, default="mock_snapshots.db",
+        "--output",
+        "-o",
+        type=str,
+        default="mock_snapshots.db",
         help="output database path (default: mock_snapshots.db)",
     )
     args = parser.parse_args()
@@ -501,9 +674,11 @@ def main() -> None:
     n_poly = len(matched_pairs) + len(noise_poly)  # 10 matched + 30 noise = 40
     n_kalshi = len(matched_pairs) + len(noise_kalshi)  # 10 matched + 5 noise = 15
     print(f"  {n_poly} poly markets, {n_kalshi} kalshi markets")
-    print(f"  {len(matched_pairs)} matched pairs ({sum(1 for p in matched_pairs if p.arb_type == 'profitable')} profitable, "
-          f"{sum(1 for p in matched_pairs if p.arb_type == 'false_positive')} false positive, "
-          f"{sum(1 for p in matched_pairs if p.arb_type == 'stable')} stable)")
+    print(
+        f"  {len(matched_pairs)} matched pairs ({sum(1 for p in matched_pairs if p.arb_type == 'profitable')} profitable, "
+        f"{sum(1 for p in matched_pairs if p.arb_type == 'false_positive')} false positive, "
+        f"{sum(1 for p in matched_pairs if p.arb_type == 'stable')} stable)"
+    )
     print(f"  {TOTAL_SCANS:,} scans over 7 days at {INTERVAL}s intervals")
 
     print("\nGenerating rows...")
@@ -517,10 +692,18 @@ def main() -> None:
 
     poly_count = conn.execute("SELECT COUNT(*) FROM polymarket_snapshots").fetchone()[0]
     kalshi_count = conn.execute("SELECT COUNT(*) FROM kalshi_snapshots").fetchone()[0]
-    poly_scans = conn.execute("SELECT COUNT(DISTINCT scan_ts) FROM polymarket_snapshots").fetchone()[0]
-    kalshi_scans = conn.execute("SELECT COUNT(DISTINCT scan_ts) FROM kalshi_snapshots").fetchone()[0]
-    poly_markets = conn.execute("SELECT COUNT(DISTINCT condition_id) FROM polymarket_snapshots").fetchone()[0]
-    kalshi_markets = conn.execute("SELECT COUNT(DISTINCT ticker) FROM kalshi_snapshots").fetchone()[0]
+    poly_scans = conn.execute(
+        "SELECT COUNT(DISTINCT scan_ts) FROM polymarket_snapshots"
+    ).fetchone()[0]
+    kalshi_scans = conn.execute("SELECT COUNT(DISTINCT scan_ts) FROM kalshi_snapshots").fetchone()[
+        0
+    ]
+    poly_markets = conn.execute(
+        "SELECT COUNT(DISTINCT condition_id) FROM polymarket_snapshots"
+    ).fetchone()[0]
+    kalshi_markets = conn.execute("SELECT COUNT(DISTINCT ticker) FROM kalshi_snapshots").fetchone()[
+        0
+    ]
 
     first_ts = conn.execute("SELECT MIN(scan_ts) FROM polymarket_snapshots").fetchone()[0]
     last_ts = conn.execute("SELECT MAX(scan_ts) FROM polymarket_snapshots").fetchone()[0]
@@ -530,12 +713,12 @@ def main() -> None:
 
     conn.close()
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"Mock database: {output_path} ({size_mb:.1f} MB)")
     print(f"  Polymarket: {poly_count:,} rows, {poly_markets} markets, {poly_scans:,} scans")
     print(f"  Kalshi:     {kalshi_count:,} rows, {kalshi_markets} markets, {kalshi_scans:,} scans")
     print(f"  Time range: {first_ts} → {last_ts}")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
 
 
 if __name__ == "__main__":

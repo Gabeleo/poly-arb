@@ -9,7 +9,6 @@ import pytest
 
 from polyarb.matching.encoder_client import EncoderClient
 
-
 # ── Mock transports ──────────────────────────────────────────
 
 

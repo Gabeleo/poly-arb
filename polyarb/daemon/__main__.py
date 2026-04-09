@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
 
+from polyarb.api.app import create_app
 from polyarb.config import Config, Settings
 from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
-from polyarb.api.app import create_app
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 from polyarb.data.async_live import AsyncLiveDataProvider
@@ -27,19 +28,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--interval", type=float, default=5.0, help="scan interval in seconds (default 5.0)"
     )
-    p.add_argument(
-        "--log-json", action="store_true", default=True, help="emit JSON logs (default)"
-    )
+    p.add_argument("--log-json", action="store_true", default=True, help="emit JSON logs (default)")
     p.add_argument(
         "--no-log-json", dest="log_json", action="store_false", help="emit human-readable logs"
     )
-    p.add_argument(
-        "--log-level", default=None, help="log level (overrides POLYARB_LOG_LEVEL)"
-    )
+    p.add_argument("--log-level", default=None, help="log level (overrides POLYARB_LOG_LEVEL)")
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     args = _parse_args()
     settings = Settings()
 
@@ -85,19 +82,24 @@ def main() -> None:
     telegram_bot = None
     approval_manager = None
     if settings.telegram_bot_token and settings.telegram_chat_id:
-        from polyarb.notifications.telegram import TelegramBot
         from polyarb.notifications.approval import ApprovalManager
+        from polyarb.notifications.telegram import TelegramBot
 
         telegram_bot = TelegramBot(
-            token=settings.telegram_bot_token, chat_id=settings.telegram_chat_id,
+            token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
         )
         approval_manager = ApprovalManager(
-            state=state, bot=telegram_bot,
-            kalshi_client=kalshi_client, config=config,
+            state=state,
+            bot=telegram_bot,
+            kalshi_client=kalshi_client,
+            config=config,
         )
         logger.info("Telegram notifications enabled (chat_id=%s)", settings.telegram_chat_id)
     else:
-        logger.info("Telegram not configured (set POLYARB_TELEGRAM_BOT_TOKEN and POLYARB_TELEGRAM_CHAT_ID)")
+        logger.info(
+            "Telegram not configured (set POLYARB_TELEGRAM_BOT_TOKEN and POLYARB_TELEGRAM_CHAT_ID)"
+        )
 
     # Optional cross-encoder verification
     encoder_client = None
@@ -127,8 +129,14 @@ def main() -> None:
         # startup
         scan_task = asyncio.get_event_loop().create_task(
             run_scan_loop(
-                state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
-                stop_event=stop_event, biencoder=biencoder,
+                state,
+                poly,
+                kalshi,
+                approval_manager,
+                telegram_bot,
+                encoder_client,
+                stop_event=stop_event,
+                biencoder=biencoder,
                 match_repo=match_repo,
             )
         )
@@ -145,13 +153,11 @@ def main() -> None:
         stop_event.set()
         try:
             await asyncio.wait_for(scan_task, timeout=FETCH_TIMEOUT + 10)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Scan did not finish in time, cancelling")
             scan_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await scan_task
-            except asyncio.CancelledError:
-                pass
         except asyncio.CancelledError:
             pass
 

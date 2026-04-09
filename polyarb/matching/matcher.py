@@ -28,8 +28,7 @@ class MatchedPair:
     def yes_spread(self) -> float:
         """YES midpoint difference (indicator only, not executable)."""
         return round(
-            self.kalshi_market.yes_token.midpoint
-            - self.poly_market.yes_token.midpoint,
+            self.kalshi_market.yes_token.midpoint - self.poly_market.yes_token.midpoint,
             4,
         )
 
@@ -83,10 +82,7 @@ class MatchedPair:
         """
         profit, kalshi_side, _, _, kalshi_price = self.best_arb
         poly_side = "no" if kalshi_side == "yes" else "yes"
-        poly_token = (
-            self.poly_market.no_token if poly_side == "no"
-            else self.poly_market.yes_token
-        )
+        poly_token = self.poly_market.no_token if poly_side == "no" else self.poly_market.yes_token
         return {
             "profit": profit,
             "kalshi": {
@@ -238,10 +234,10 @@ def generate_all_pairs(
     kalshi_years = [extract_years(m.question) for m in kalshi_markets]
 
     scored: list[tuple[float, int, int]] = []
-    for i, pm in enumerate(poly_markets):
+    for i, _pm in enumerate(poly_markets):
         py = poly_years[i]
         pn = poly_norm[i]
-        for j, km in enumerate(kalshi_markets):
+        for j, _km in enumerate(kalshi_markets):
             ky = kalshi_years[j]
             if py and ky and not (py & ky):
                 continue
@@ -253,10 +249,7 @@ def generate_all_pairs(
     scored.sort(key=lambda t: t[0], reverse=True)
     top = scored[:max_candidates]
 
-    return [
-        MatchedPair(poly_markets[i], kalshi_markets[j], 0.0)
-        for _, i, j in top
-    ]
+    return [MatchedPair(poly_markets[i], kalshi_markets[j], 0.0) for _, i, j in top]
 
 
 # ── MatchingStrategy protocol ─────────────────────────────────────
@@ -285,8 +278,12 @@ class TokenMatcher:
         threshold: float,
     ) -> list[MatchedPair]:
         import asyncio
+
         return await asyncio.to_thread(
-            find_matches, poly_markets, kalshi_markets, threshold,
+            find_matches,
+            poly_markets,
+            kalshi_markets,
+            threshold,
         )
 
 
@@ -305,13 +302,18 @@ class EncoderMatcher:
         threshold: float,
     ) -> list[MatchedPair]:
         import asyncio
+
         from polyarb.daemon.engine import _verify_candidates
 
         candidates = await asyncio.to_thread(
-            generate_all_pairs, poly_markets, kalshi_markets,
+            generate_all_pairs,
+            poly_markets,
+            kalshi_markets,
         )
         if self._biencoder is not None:
             candidates = await asyncio.to_thread(
-                self._biencoder.filter_candidates, candidates, threshold,
+                self._biencoder.filter_candidates,
+                candidates,
+                threshold,
             )
         return await _verify_candidates(candidates, self._encoder, self._threshold)

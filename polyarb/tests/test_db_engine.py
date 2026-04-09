@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
 from sqlalchemy import text
 
 from polyarb.db.engine import create_engine, get_database_url

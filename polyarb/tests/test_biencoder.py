@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import numpy as np
+import pytest
 
-from polyarb.matching.biencoder import BiEncoderFilter
-from polyarb.matching.matcher import MatchedPair
-from polyarb.models import Market, Side, Token
+pytest.importorskip("numpy", reason="numpy required for biencoder tests")
+pytest.importorskip(
+    "sentence_transformers", reason="sentence-transformers required for biencoder tests"
+)
 
+from polyarb.matching.biencoder import BiEncoderFilter  # noqa: E402
+from polyarb.matching.matcher import MatchedPair  # noqa: E402
+from polyarb.models import Market, Side, Token  # noqa: E402
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -66,8 +70,8 @@ def test_threshold_filtering():
     """Pairs scoring below threshold are excluded, those above are kept."""
     bf = BiEncoderFilter()
     candidates = [
-        _pair("Will Bitcoin exceed $100,000?", "BTC above $100k?"),       # similar
-        _pair("Will it rain in Tokyo?", "Who won the Super Bowl?"),        # unrelated
+        _pair("Will Bitcoin exceed $100,000?", "BTC above $100k?"),  # similar
+        _pair("Will it rain in Tokyo?", "Who won the Super Bowl?"),  # unrelated
     ]
     result = bf.filter_candidates(candidates, threshold=0.3)
     # The similar pair should survive, the unrelated one likely won't
@@ -79,10 +83,7 @@ def test_max_keep_limit():
     """max_keep should cap the number of returned candidates."""
     bf = BiEncoderFilter()
     # Create 10 identical-question pairs (all will pass threshold)
-    candidates = [
-        _pair(f"Will event {i} happen?", f"Will event {i} happen?")
-        for i in range(10)
-    ]
+    candidates = [_pair(f"Will event {i} happen?", f"Will event {i} happen?") for i in range(10)]
     result = bf.filter_candidates(candidates, threshold=0.1, max_keep=3)
     assert len(result) == 3
 
@@ -181,8 +182,10 @@ def test_semantic_similarity():
     """Bi-encoder should catch semantic similarity that character matching misses."""
     bf = BiEncoderFilter()
     candidates = [
-        _pair("Will the U.S. president be impeached?",
-              "Will the United States president face impeachment?"),
+        _pair(
+            "Will the U.S. president be impeached?",
+            "Will the United States president face impeachment?",
+        ),
     ]
     result = bf.filter_candidates(candidates, threshold=0.5)
     assert len(result) == 1

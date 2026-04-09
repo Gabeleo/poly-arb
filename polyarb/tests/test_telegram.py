@@ -11,13 +11,10 @@ from polyarb.matching.matcher import MatchedPair
 from polyarb.models import ArbType, Market, Opportunity, Side, Token
 from polyarb.notifications.telegram import TelegramBot
 
-
 # ── Helpers ─────────────────────────────────────────────────
 
 
-def _make_market(
-    cid: str, question: str, platform: str, yes_ask: float
-) -> Market:
+def _make_market(cid: str, question: str, platform: str, yes_ask: float) -> Market:
     no_ask = round(1.0 - yes_ask, 4)
     return Market(
         condition_id=cid,
@@ -186,12 +183,18 @@ async def test_send_digest():
             condition_id=cid,
             question=f"Will {cid} happen?",
             yes_token=Token(
-                token_id=f"{cid}:y", side=Side.YES, midpoint=0.6,
-                best_bid=0.59, best_ask=0.61,
+                token_id=f"{cid}:y",
+                side=Side.YES,
+                midpoint=0.6,
+                best_bid=0.59,
+                best_ask=0.61,
             ),
             no_token=Token(
-                token_id=f"{cid}:n", side=Side.NO, midpoint=0.4,
-                best_bid=0.39, best_ask=0.41,
+                token_id=f"{cid}:n",
+                side=Side.NO,
+                midpoint=0.4,
+                best_bid=0.39,
+                best_ask=0.41,
             ),
         )
 
