@@ -134,6 +134,8 @@ async def _match_markets(
     kalshi_markets: list[Market],
     encoder_client: EncoderClient | None,
     final_threshold: float,
+    biencoder=None,
+    candidate_threshold: float = 0.15,
 ) -> list[MatchedPair]:
     """Match markets across platforms using encoder or token-based fallback."""
     if not poly_markets or not kalshi_markets:
@@ -147,6 +149,16 @@ async def _match_markets(
             "Generated %d candidate pairs (%d poly x %d kalshi)",
             len(candidates), len(poly_markets), len(kalshi_markets),
         )
+
+        # Bi-encoder pre-filtering
+        if biencoder is not None:
+            candidates = await asyncio.to_thread(
+                biencoder.filter_candidates,
+                candidates,
+                threshold=candidate_threshold,
+            )
+            logger.info("Bi-encoder filtered to %d candidates", len(candidates))
+
         return await _verify_candidates(candidates, encoder_client, final_threshold)
 
     # No encoder: use token-based matching only
@@ -199,6 +211,7 @@ async def run_scan_once(
     encoder_client: EncoderClient | None = None,
     poly_cb: _CircuitBreaker | None = None,
     kalshi_cb: _CircuitBreaker | None = None,
+    biencoder=None,
 ) -> None:
     """Fetch from both providers, detect matches and opportunities, update state."""
     poly_cb = poly_cb or _CircuitBreaker("poly")
@@ -209,6 +222,8 @@ async def run_scan_once(
     cfg = state.config
     matches = await _match_markets(
         poly_markets, kalshi_markets, encoder_client, cfg.match_final_threshold,
+        biencoder=biencoder,
+        candidate_threshold=cfg.match_candidate_threshold,
     )
 
     all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
@@ -220,6 +235,7 @@ async def run_scan_loop(
     state: State, poly, kalshi, approval_manager=None, telegram_bot=None,
     encoder_client: EncoderClient | None = None,
     stop_event: asyncio.Event | None = None,
+    biencoder=None,
 ) -> None:
     """Continuous scan loop with graceful shutdown support.
 
@@ -238,7 +254,7 @@ async def run_scan_loop(
         try:
             await run_scan_once(
                 state, poly, kalshi, approval_manager, encoder_client,
-                poly_cb, kalshi_cb,
+                poly_cb, kalshi_cb, biencoder=biencoder,
             )
 
             # Hourly digest of top single-platform opps

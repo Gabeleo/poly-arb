@@ -24,6 +24,7 @@ class State:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_scan_at: datetime | None = None
     last_scan_error: str | None = None
+    biencoder_enabled: bool = False
     _seen_matches: dict[str, float] = field(default_factory=dict)
     _seen_opps: dict[str, float] = field(default_factory=dict)
 
@@ -89,4 +90,5 @@ class State:
             "kelly_enabled": self.config.bankroll > 0 and self.config.kelly_fraction > 0,
             "bankroll": self.config.bankroll,
             "kelly_fraction": self.config.kelly_fraction,
+            "biencoder_enabled": self.biencoder_enabled,
         }
