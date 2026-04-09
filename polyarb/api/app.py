@@ -52,13 +52,14 @@ def create_app(
         Route("/openapi.json", openapi_spec, methods=["GET"]),
     ]
 
-    middleware = []
+    middleware = [
+        Middleware(RequestIdMiddleware),   # outermost — sets request_id first
+        Middleware(MetricsMiddleware),     # times everything below
+        Middleware(RateLimitMiddleware),   # rate check before auth
+    ]
     if api_key:
         middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))
         logger.info("API key authentication enabled")
-    middleware.append(Middleware(RateLimitMiddleware))
-    middleware.append(Middleware(MetricsMiddleware))
-    middleware.append(Middleware(RequestIdMiddleware))
 
     app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
 

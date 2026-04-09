@@ -58,6 +58,7 @@ class RateLimitMiddleware:
         self._rate = per_min / 60.0  # tokens per second
         self._buckets: dict[str, _TokenBucket] = {}
         self._request_count = 0
+        self._trusted_proxies = int(os.environ.get("TRUSTED_PROXY_COUNT", "0"))
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -91,11 +92,35 @@ class RateLimitMiddleware:
 
         await self.app(scope, receive, send)
 
-    @staticmethod
-    def _get_client_ip(scope: Scope) -> str:
+    def _get_client_ip(self, scope: Scope) -> str:
+        """Extract client IP, respecting X-Forwarded-For behind proxies.
+
+        When behind a reverse proxy, X-Forwarded-For contains:
+            "client_ip, proxy1, proxy2"
+        We take the leftmost (first) entry — the original client IP.
+        When TRUSTED_PROXY_COUNT is set, take the Nth-from-right entry
+        to defend against spoofed headers.
+
+        Falls back to scope["client"] (TCP peer) when no proxy header
+        is present.
+        """
+        headers = dict(scope.get("headers", []))
+
+        xff = headers.get(b"x-forwarded-for", b"").decode().strip()
+        if xff:
+            parts = [p.strip() for p in xff.split(",")]
+            if self._trusted_proxies > 0 and len(parts) > self._trusted_proxies:
+                return parts[-1 - self._trusted_proxies]
+            return parts[0]
+
+        xri = headers.get(b"x-real-ip", b"").decode().strip()
+        if xri:
+            return xri
+
         client = scope.get("client")
         if client:
             return client[0]
+
         return "unknown"
 
     def _prune_stale(self) -> None:
