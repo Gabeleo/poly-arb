@@ -72,9 +72,6 @@ services:
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
-    depends_on:
-      daemon:
-        condition: service_healthy
 
   grafana:
     image: grafana/grafana:11.1.0

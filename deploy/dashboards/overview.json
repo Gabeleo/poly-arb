@@ -90,7 +90,7 @@
       "id": 4,
       "title": "WebSocket Clients",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 8 },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 },
       "datasource": { "uid": "${datasource}" },
       "targets": [
         {
@@ -105,8 +105,8 @@
     {
       "id": 5,
       "title": "Circuit Breaker State",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 8 },
+      "type": "state-timeline",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 },
       "datasource": { "uid": "${datasource}" },
       "targets": [
         {

@@ -121,12 +121,12 @@
       "id": 5,
       "title": "Fetch Success Rate",
       "type": "gauge",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 12 },
       "datasource": { "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "1 - (rate(polyarb_fetch_errors_total{provider=\"poly\"}[1h]) / rate(polyarb_scan_total[1h]))",
-          "legendFormat": "polymarket"
+          "expr": "1 - (rate(polyarb_fetch_errors_total{provider=~\"$provider\"}[1h]) / sum(rate(polyarb_scan_total[1h])))",
+          "legendFormat": "{{provider}}"
         }
       ],
       "fieldConfig": {
@@ -141,75 +141,6 @@
               { "value": 0.99, "color": "green" }
             ]
           }
-        }
-      }
-    },
-    {
-      "id": 6,
-      "title": "Fetch Success Rate",
-      "type": "gauge",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
-      "datasource": { "uid": "${datasource}" },
-      "targets": [
-        {
-          "expr": "1 - (rate(polyarb_fetch_errors_total{provider=\"kalshi\"}[1h]) / rate(polyarb_scan_total[1h]))",
-          "legendFormat": "kalshi"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "thresholds": {
-            "steps": [
-              { "value": 0, "color": "red" },
-              { "value": 0.9, "color": "yellow" },
-              { "value": 0.99, "color": "green" }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 7,
-      "title": "Encoder Scoring Latency",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "uid": "${datasource}" },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, rate(polyarb_encoder_duration_seconds_bucket[5m]))",
-          "legendFormat": "p50"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(polyarb_encoder_duration_seconds_bucket[5m]))",
-          "legendFormat": "p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": { "drawStyle": "line", "fillOpacity": 10 }
-        }
-      }
-    },
-    {
-      "id": 8,
-      "title": "Encoder Errors",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "uid": "${datasource}" },
-      "targets": [
-        {
-          "expr": "rate(polyarb_encoder_errors_total[5m])",
-          "legendFormat": "errors/s"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": { "drawStyle": "line", "fillOpacity": 10 }
         }
       }
     }
