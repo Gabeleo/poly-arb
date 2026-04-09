@@ -10,6 +10,7 @@ from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.matching.matcher import MatchedPair
 from polyarb.notifications.base import Notifier
+from polyarb.sizing import kelly_fraction_raw, kelly_size
 
 
 @dataclass
@@ -18,6 +19,8 @@ class PendingApproval:
     match_key: str  # "poly_cid:kalshi_cid"
     match_data: MatchedPair
     profit_at_alert: float
+    kelly_size: float  # recommended position size in contracts
+    kelly_fraction_raw: float  # raw Kelly % of bankroll
     telegram_message_id: int
     created_at: float  # time.monotonic()
 
@@ -82,11 +85,34 @@ class ApprovalManager:
             key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
             profit = self.fee_adjusted_profit(match)
 
+            # Compute Kelly sizing info for operator visibility
+            k_frac_raw = 0.0
+            k_size = self._config.order_size
+            if self._config.bankroll > 0 and self._config.kelly_fraction > 0:
+                arb = compute_arb(
+                    match.poly_market.yes_token.best_ask,
+                    match.poly_market.no_token.best_ask,
+                    match.kalshi_market.yes_token.best_ask,
+                    match.kalshi_market.no_token.best_ask,
+                )
+                if arb and arb.net_profit > 0:
+                    cost = arb.gross_cost + arb.poly_fee + arb.kalshi_fee
+                    k_frac_raw = kelly_fraction_raw(arb.net_profit, cost)
+                    k_size = kelly_size(
+                        net_profit_per_contract=arb.net_profit,
+                        cost_per_contract=cost,
+                        bankroll=self._config.bankroll,
+                        fraction=self._config.kelly_fraction,
+                        max_position=self._config.max_position,
+                    )
+
             self._pending[approval_id] = PendingApproval(
                 approval_id=approval_id,
                 match_key=key,
                 match_data=match,
                 profit_at_alert=profit,
+                kelly_size=k_size,
+                kelly_fraction_raw=k_frac_raw,
                 telegram_message_id=message_id,
                 created_at=time.monotonic(),
             )

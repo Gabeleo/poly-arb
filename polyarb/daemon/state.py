@@ -86,4 +86,7 @@ class State:
             "connected_clients": len(self.ws_clients),
             "match_count": len(self.matches),
             "opportunity_count": len(self.opportunities),
+            "kelly_enabled": self.config.bankroll > 0 and self.config.kelly_fraction > 0,
+            "bankroll": self.config.bankroll,
+            "kelly_fraction": self.config.kelly_fraction,
         }

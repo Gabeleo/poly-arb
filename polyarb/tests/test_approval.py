@@ -263,6 +263,37 @@ async def test_expire_stale_removes_old_approvals():
     assert len(bot.expired) == 1
 
 
+# ── Tests: Kelly fields in PendingApproval ────────────────
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_kelly_fields_when_configured():
+    """Kelly fields should be populated when bankroll > 0."""
+    cfg = Config(bankroll=1000.0, kelly_fraction=0.5)
+    mgr, bot, _, _ = _make_manager(config=cfg)
+    match = _profitable_pair()
+
+    await mgr.on_new_matches([match])
+
+    pending = list(mgr._pending.values())[0]
+    assert pending.kelly_fraction_raw > 0.0
+    assert pending.kelly_size > 0.0
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_kelly_fields_when_disabled():
+    """When Kelly is disabled, kelly_fraction_raw=0.0 and kelly_size=order_size."""
+    cfg = Config(bankroll=0.0, order_size=15.0)
+    mgr, bot, _, _ = _make_manager(config=cfg)
+    match = _profitable_pair()
+
+    await mgr.on_new_matches([match])
+
+    pending = list(mgr._pending.values())[0]
+    assert pending.kelly_fraction_raw == 0.0
+    assert pending.kelly_size == 15.0
+
+
 @pytest.mark.asyncio
 async def test_expire_stale_keeps_fresh_approvals():
     cfg = Config(approval_timeout=9999)

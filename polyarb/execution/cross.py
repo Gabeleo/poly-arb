@@ -7,8 +7,10 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 
+from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
 from polyarb.matching.matcher import MatchedPair
+from polyarb.sizing import kelly_size
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,36 @@ class CrossExecutor:
     async def execute(self, match: MatchedPair, config: Config) -> ExecutionResult:
         """Place both legs concurrently. Unwind on partial failure."""
         params = match.execution_params
-        size = int(config.order_size)
+
+        # Compute Kelly-optimal size if configured, else static fallback
+        if config.bankroll > 0 and config.kelly_fraction > 0:
+            arb = compute_arb(
+                match.poly_market.yes_token.best_ask,
+                match.poly_market.no_token.best_ask,
+                match.kalshi_market.yes_token.best_ask,
+                match.kalshi_market.no_token.best_ask,
+            )
+            if arb and arb.net_profit > 0:
+                cost = arb.gross_cost + arb.poly_fee + arb.kalshi_fee
+                size = kelly_size(
+                    net_profit_per_contract=arb.net_profit,
+                    cost_per_contract=cost,
+                    bankroll=config.bankroll,
+                    fraction=config.kelly_fraction,
+                    max_position=config.max_position,
+                )
+            else:
+                size = 0.0
+        else:
+            size = config.order_size
+
+        if size < 1.0:
+            return ExecutionResult(
+                success=False,
+                error="Position size below minimum (Kelly or edge too small)",
+            )
+
+        size = int(size)
 
         k = params["kalshi"]
         p = params["poly"]

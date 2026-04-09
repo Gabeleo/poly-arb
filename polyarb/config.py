@@ -7,6 +7,9 @@ class Config:
     max_prob: float = 0.95
     scan_interval: float = 10.0
     order_size: float = 10.0
+    kelly_fraction: float = 0.5
+    max_position: float = 100.0
+    bankroll: float = 0.0
     dedup_window: int = 60
     approval_timeout: float = 120.0
     digest_interval: float = 3600.0
@@ -22,6 +25,12 @@ class Config:
             raise ValueError("scan_interval must be > 0")
         if self.order_size <= 0:
             raise ValueError("order_size must be > 0")
+        if not (0.0 <= self.kelly_fraction <= 1.0):
+            raise ValueError("kelly_fraction must be in [0.0, 1.0]")
+        if self.max_position <= 0:
+            raise ValueError("max_position must be > 0")
+        if self.bankroll < 0:
+            raise ValueError("bankroll must be >= 0.0")
         if self.dedup_window <= 0:
             raise ValueError("dedup_window must be > 0")
         if self.approval_timeout < 0:
