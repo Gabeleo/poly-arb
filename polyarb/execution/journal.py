@@ -29,8 +29,12 @@ class ExecutionJournal:
 
     def record_execution(
         self, execution_id: str, match_key: str, leg_count: int,
+        idempotency_key: str | None = None,
     ) -> None:
-        self._repo.record_execution(execution_id, match_key, leg_count)
+        self._repo.record_execution(execution_id, match_key, leg_count, idempotency_key)
+
+    def find_by_idempotency_key(self, key: str) -> dict | None:
+        return self._repo.find_by_idempotency_key(key)
 
     def record_completion(
         self, execution_id: str, success: bool, profit: float | None = None,

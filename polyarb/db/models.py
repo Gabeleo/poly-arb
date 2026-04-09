@@ -62,6 +62,7 @@ executions = SATable(
     Column("leg_count", Integer, nullable=False),
     Column("profit", Float, nullable=True),
     Column("completed_at", Text, nullable=True),
+    Column("idempotency_key", Text, nullable=True),
 )
 
 execution_legs = SATable(
@@ -130,6 +131,7 @@ Index("idx_kalshi_scan", kalshi_snapshots.c.scan_ts)
 Index("idx_legs_execution", execution_legs.c.execution_id)
 Index("idx_legs_status", execution_legs.c.status)
 Index("idx_exec_status", executions.c.status)
+Index("idx_exec_idempotency", executions.c.idempotency_key)
 Index("idx_match_snap_scan", match_snapshots.c.scan_ts)
 Index("idx_match_snap_pair", match_snapshots.c.poly_condition_id, match_snapshots.c.kalshi_ticker)
 Index("idx_audit_action", audit_log.c.action)
