@@ -24,6 +24,7 @@ class State:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_scan_at: datetime | None = None
     last_scan_error: str | None = None
+    biencoder_enabled: bool = False
     _seen_matches: dict[str, float] = field(default_factory=dict)
     _seen_opps: dict[str, float] = field(default_factory=dict)
 
@@ -86,4 +87,5 @@ class State:
             "connected_clients": len(self.ws_clients),
             "match_count": len(self.matches),
             "opportunity_count": len(self.opportunities),
+            "biencoder_enabled": self.biencoder_enabled,
         }

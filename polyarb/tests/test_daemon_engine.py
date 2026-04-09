@@ -243,3 +243,81 @@ async def test_scan_continues_with_provider_timeout():
     # Should not raise — the scan should handle the failure gracefully
     await run_scan_once(state, poly, kalshi)
     assert state.scan_count == 1
+
+
+# ── Tests (bi-encoder integration) ─────────────────────────
+
+
+class FakeBiEncoder:
+    """Fake BiEncoderFilter that returns a subset of candidates."""
+
+    def __init__(self, keep_count: int | None = None, score: float = 0.4):
+        self._keep_count = keep_count
+        self._score = score
+        self.call_count = 0
+        self.last_candidates: list = []
+
+    def filter_candidates(self, candidates, threshold=0.15, max_keep=50):
+        from polyarb.matching.matcher import MatchedPair
+
+        self.call_count += 1
+        self.last_candidates = candidates
+        keep = candidates[:self._keep_count] if self._keep_count is not None else candidates
+        return [
+            MatchedPair(c.poly_market, c.kalshi_market, self._score)
+            for c in keep
+        ]
+
+
+async def test_biencoder_reduces_candidate_count():
+    """Bi-encoder should filter candidates before they reach the cross-encoder."""
+    poly = FakeProvider([
+        _mkt("p1", "Will X happen?"),
+        _mkt("p2", "Will Y happen?"),
+    ])
+    kalshi = FakeProvider([
+        _mkt("k1", "Will X happen?", "kalshi"),
+        _mkt("k2", "Will Y happen?", "kalshi"),
+    ])
+    # Bi-encoder keeps only 1 candidate out of the cartesian product
+    biencoder = FakeBiEncoder(keep_count=1, score=0.4)
+    # Encoder scores the single candidate highly
+    encoder = FakeEncoder(scores=[0.85])
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)
+
+    assert biencoder.call_count == 1
+    # Encoder only received 1 pair (not the full cartesian product)
+    assert len(encoder.pairs_sent) == 1
+    assert len(state.matches) == 1
+
+
+async def test_biencoder_none_skips_filtering():
+    """When biencoder is None, all candidates reach the cross-encoder."""
+    poly = FakeProvider([_mkt("p1", "Will X happen?")])
+    kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
+    encoder = FakeEncoder(scores=[0.85])
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=None)
+
+    # All candidates from generate_all_pairs reach the encoder
+    assert len(encoder.pairs_sent) == 1
+    assert len(state.matches) == 1
+    assert state.matches[0].confidence == 0.85
+
+
+async def test_biencoder_scores_overwritten_by_crossencoder():
+    """Cross-encoder should overwrite bi-encoder confidence values."""
+    poly = FakeProvider([_mkt("p1", "Will X happen?")])
+    kalshi = FakeProvider([_mkt("k1", "Will X happen?", "kalshi")])
+    biencoder = FakeBiEncoder(score=0.4)  # bi-encoder sets confidence=0.4
+    encoder = FakeEncoder(scores=[0.92])   # cross-encoder sets confidence=0.92
+    state = State(config=Config())
+
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder, biencoder=biencoder)
+
+    assert len(state.matches) == 1
+    # Final confidence should be from the cross-encoder, not the bi-encoder
+    assert state.matches[0].confidence == 0.92

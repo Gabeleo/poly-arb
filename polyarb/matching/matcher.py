@@ -293,9 +293,10 @@ class TokenMatcher:
 class EncoderMatcher:
     """Two-phase matching: generate all pairs, then verify with cross-encoder."""
 
-    def __init__(self, encoder_client, final_threshold: float = 0.5) -> None:
+    def __init__(self, encoder_client, final_threshold: float = 0.5, biencoder=None) -> None:
         self._encoder = encoder_client
         self._threshold = final_threshold
+        self._biencoder = biencoder
 
     async def match(
         self,
@@ -309,4 +310,8 @@ class EncoderMatcher:
         candidates = await asyncio.to_thread(
             generate_all_pairs, poly_markets, kalshi_markets,
         )
-        return await _verify_candidates(candidates, self._encoder, threshold)
+        if self._biencoder is not None:
+            candidates = await asyncio.to_thread(
+                self._biencoder.filter_candidates, candidates, threshold,
+            )
+        return await _verify_candidates(candidates, self._encoder, self._threshold)

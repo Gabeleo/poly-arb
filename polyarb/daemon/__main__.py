@@ -83,6 +83,17 @@ def main() -> None:
     else:
         logger.info("Cross-encoder not configured (set ENCODER_URL)")
 
+    # Optional bi-encoder pre-filter (local sentence embeddings)
+    biencoder = None
+    try:
+        from polyarb.matching.biencoder import BiEncoderFilter
+
+        biencoder = BiEncoderFilter()
+        logger.info("Bi-encoder filter loaded (all-MiniLM-L6-v2)")
+    except ImportError:
+        logger.info("sentence-transformers not available, bi-encoder disabled")
+    state.biencoder_enabled = biencoder is not None
+
     stop_event = asyncio.Event()
 
     @asynccontextmanager
@@ -91,7 +102,7 @@ def main() -> None:
         scan_task = asyncio.get_event_loop().create_task(
             run_scan_loop(
                 state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
-                stop_event=stop_event,
+                stop_event=stop_event, biencoder=biencoder,
             )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
