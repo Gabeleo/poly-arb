@@ -118,11 +118,11 @@ async def test_encoder_metrics_recorded():
     encoder = FakeEncoder(scores=[0.92])
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     # Encoder duration should have at least one observation
     # We check the sum is > 0 which implies at least one observation
-    sample = metrics.encoder_duration.collect()[0]
+    sample = metrics.encoder_duration.collect()[0]  # type: ignore[index]
     assert any(s.value > 0 for s in sample.samples if s.name.endswith("_count"))
 
 
@@ -132,7 +132,7 @@ async def test_encoder_failure_metric():
     encoder = FakeEncoder(scores=None)
     state = State(config=Config())
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     assert _get_counter_value(metrics.encoder_errors) >= 1.0
 
@@ -156,8 +156,8 @@ async def test_match_and_opportunity_gauges():
     await run_scan_once(state, poly, kalshi)
 
     # matches_found and opportunities_found should be set
-    sample_m = metrics.matches_found.collect()[0]
-    sample_o = metrics.opportunities_found.collect()[0]
+    sample_m = metrics.matches_found.collect()[0]  # type: ignore[index]
+    sample_o = metrics.opportunities_found.collect()[0]  # type: ignore[index]
     # At least verify they don't error — gauge values may be 0 or positive
     assert sample_m is not None
     assert sample_o is not None

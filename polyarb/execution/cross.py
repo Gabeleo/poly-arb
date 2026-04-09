@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import IntegrityError
 
@@ -14,6 +15,11 @@ from polyarb.config import Config
 from polyarb.execution.idempotency import generate_idempotency_key
 from polyarb.matching.matcher import MatchedPair
 from polyarb.sizing import kelly_size
+
+if TYPE_CHECKING:
+    from polyarb.execution.async_kalshi import AsyncKalshiClient
+    from polyarb.execution.journal import ExecutionJournal
+    from polyarb.execution.polymarket import AsyncPolymarketClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +46,11 @@ class ExecutionResult:
 class CrossExecutor:
     """Orchestrates dual-leg arb execution across Kalshi and Polymarket."""
 
-    kalshi: object  # AsyncKalshiClient
-    poly: object  # AsyncPolymarketClient
-    journal: object | None = None  # Optional ExecutionJournal
+    kalshi: AsyncKalshiClient
+    poly: AsyncPolymarketClient
+    journal: ExecutionJournal | None = None
 
-    async def execute(self, match: MatchedPair, config: Config) -> ExecutionResult:
+    async def execute(self, match: MatchedPair, config: Config) -> ExecutionResult:  # noqa: C901
         """Place both legs concurrently. Unwind on partial failure."""
         params = match.execution_params
 
@@ -92,7 +98,9 @@ class CrossExecutor:
             if existing is not None:
                 logger.info(
                     "Idempotency hit: execution %s already exists for key %s (status=%s)",
-                    existing["execution_id"], idem_key, existing["status"],
+                    existing["execution_id"],
+                    idem_key,
+                    existing["status"],
                 )
                 return ExecutionResult(
                     success=existing["status"] == "completed",
@@ -113,7 +121,8 @@ class CrossExecutor:
                 if existing is not None:
                     logger.info(
                         "Idempotency race: execution %s won for key %s",
-                        existing["execution_id"], idem_key,
+                        existing["execution_id"],
+                        idem_key,
                     )
                     return ExecutionResult(
                         success=existing["status"] == "completed",
@@ -123,13 +132,25 @@ class CrossExecutor:
                 execution_id = uuid.uuid4().hex[:12]
                 self.journal.record_execution(execution_id, match_key, 2)
             k_row_id = self.journal.record_attempt(
-                execution_id, 0, "kalshi", k["ticker"], k["side"], "buy",
-                k["price"], float(size),
+                execution_id,
+                0,
+                "kalshi",
+                k["ticker"],
+                k["side"],
+                "buy",
+                k["price"],
+                float(size),
             )
             self.journal.mark_sent(k_row_id)
             p_row_id = self.journal.record_attempt(
-                execution_id, 1, "polymarket", p["token_id"], p["side"], "buy",
-                p["price"], float(size),
+                execution_id,
+                1,
+                "polymarket",
+                p["token_id"],
+                p["side"],
+                "buy",
+                p["price"],
+                float(size),
             )
             self.journal.mark_sent(p_row_id)
 
@@ -148,28 +169,38 @@ class CrossExecutor:
             order_type="FOK",
         )
 
-        kalshi_result, poly_result = await asyncio.gather(
-            kalshi_coro, poly_coro, return_exceptions=True,
+        results: tuple[
+            dict[str, Any] | BaseException, dict[str, Any] | BaseException
+        ] = await asyncio.gather(
+            kalshi_coro,
+            poly_coro,
+            return_exceptions=True,
         )
+        kalshi_result: dict[str, Any] | BaseException = results[0]
+        poly_result: dict[str, Any] | BaseException = results[1]
 
-        kalshi_ok = not isinstance(kalshi_result, BaseException)
-        poly_ok = not isinstance(poly_result, BaseException)
+        kalshi_failed = isinstance(kalshi_result, BaseException)
+        poly_failed = isinstance(poly_result, BaseException)
 
         # Journal: record results
         if self.journal is not None:
-            if kalshi_ok and k_row_id is not None:
-                oid = kalshi_result.get("order_id", "") if isinstance(kalshi_result, dict) else None
+            if not kalshi_failed and k_row_id is not None:
+                assert isinstance(kalshi_result, dict)
+                oid = kalshi_result.get("order_id", "")
                 self.journal.record_result(k_row_id, oid, "filled")
-            elif not kalshi_ok and k_row_id is not None:
+            elif kalshi_failed and k_row_id is not None:
                 self.journal.record_result(k_row_id, None, "failed", error=str(kalshi_result))
-            if poly_ok and p_row_id is not None:
-                oid = poly_result.get("orderID", "") if isinstance(poly_result, dict) else None
+            if not poly_failed and p_row_id is not None:
+                assert isinstance(poly_result, dict)
+                oid = poly_result.get("orderID", "")
                 self.journal.record_result(p_row_id, oid, "filled")
-            elif not poly_ok and p_row_id is not None:
+            elif poly_failed and p_row_id is not None:
                 self.journal.record_result(p_row_id, None, "failed", error=str(poly_result))
 
         # Both succeed
-        if kalshi_ok and poly_ok:
+        if not kalshi_failed and not poly_failed:
+            assert isinstance(kalshi_result, dict)
+            assert isinstance(poly_result, dict)
             logger.info("Both legs filled for %s", match.kalshi_market.condition_id)
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, True, params["profit"])
@@ -180,7 +211,7 @@ class CrossExecutor:
             )
 
         # Both fail
-        if not kalshi_ok and not poly_ok:
+        if kalshi_failed and poly_failed:
             if self.journal is not None and execution_id:
                 self.journal.record_completion(execution_id, False)
             return ExecutionResult(
@@ -189,7 +220,8 @@ class CrossExecutor:
             )
 
         # Partial failure — attempt to unwind the successful leg
-        if kalshi_ok and not poly_ok:
+        if not kalshi_failed and poly_failed:
+            assert isinstance(kalshi_result, dict)
             unwound = await self._try_cancel_kalshi(kalshi_result)
             if self.journal is not None and k_row_id is not None and unwound:
                 self.journal.record_cancel(k_row_id, "cancelled")
@@ -203,6 +235,7 @@ class CrossExecutor:
             )
 
         # poly_ok and not kalshi_ok
+        assert isinstance(poly_result, dict)
         unwound = await self._try_cancel_poly(poly_result)
         if self.journal is not None and p_row_id is not None and unwound:
             self.journal.record_cancel(p_row_id, "cancelled")
@@ -215,7 +248,7 @@ class CrossExecutor:
             unwound=unwound,
         )
 
-    async def _try_cancel_kalshi(self, order: dict) -> bool:
+    async def _try_cancel_kalshi(self, order: dict[str, Any]) -> bool:
         """Attempt to cancel a Kalshi order. Returns True on success."""
         order_id = order.get("order_id")
         if not order_id:
@@ -228,7 +261,7 @@ class CrossExecutor:
             logger.error("Failed to cancel Kalshi order %s: %s", order_id, exc)
             return False
 
-    async def _try_cancel_poly(self, order: dict) -> bool:
+    async def _try_cancel_poly(self, order: dict[str, Any]) -> bool:
         """Attempt to cancel a Polymarket order. Returns True on success."""
         order_id = order.get("orderID")
         if not order_id:

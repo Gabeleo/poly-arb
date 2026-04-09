@@ -66,13 +66,15 @@ def compute_arb(
     poly_no_ask: float,
     kalshi_yes_ask: float,
     kalshi_no_ask: float,
-    fees: FeeParams = FeeParams(),
+    fees: FeeParams | None = None,
 ) -> ArbResult | None:
     """Compute the best arb direction and return its cost breakdown.
 
     Returns the profitable direction, or the less-negative one if neither
     is profitable.  Returns None only if inputs are invalid.
     """
+    if fees is None:
+        fees = FeeParams()
     dir_a = _eval_direction(
         "poly_yes_kalshi_no",
         poly_ask=poly_yes_ask,

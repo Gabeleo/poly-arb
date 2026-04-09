@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
@@ -47,8 +47,10 @@ class ApprovalManager:
         pm = match.poly_market
         km = match.kalshi_market
         arb = compute_arb(
-            pm.yes_token.best_ask, pm.no_token.best_ask,
-            km.yes_token.best_ask, km.no_token.best_ask,
+            pm.yes_token.best_ask,
+            pm.no_token.best_ask,
+            km.yes_token.best_ask,
+            km.no_token.best_ask,
         )
         return arb.net_profit if arb else 0.0
 
@@ -68,10 +70,7 @@ class ApprovalManager:
         if key not in self._alerted:
             return True
 
-        if profit > self._alerted[key]:
-            return True
-
-        return False
+        return profit > self._alerted[key]
 
     async def on_new_matches(self, new_matches: list[MatchedPair]) -> None:
         """Send Telegram alerts for matches that pass ``should_alert``."""

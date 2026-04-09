@@ -6,6 +6,7 @@ import os
 import tempfile
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from polyarb.execution.journal import ExecutionJournal
 
@@ -26,9 +27,7 @@ def journal():
 
 def test_tables_created(journal: ExecutionJournal):
     """Both tables and indexes exist after init."""
-    tables = journal._conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()
+    tables = journal._conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     names = {r["name"] for r in tables}
     assert "executions" in names
     assert "execution_legs" in names
@@ -46,7 +45,14 @@ def test_full_success_lifecycle(journal: ExecutionJournal):
     """Record execution → attempt → sent → result → completion."""
     journal.record_execution("exec-1", "match-key-1", 1)
     row_id = journal.record_attempt(
-        "exec-1", 0, "kalshi", "TICKER-1", "yes", "buy", 0.42, 10.0,
+        "exec-1",
+        0,
+        "kalshi",
+        "TICKER-1",
+        "yes",
+        "buy",
+        0.42,
+        10.0,
     )
     journal.mark_sent(row_id)
     journal.record_result(row_id, "order-abc", "filled", fill_qty=10.0)
@@ -61,9 +67,7 @@ def test_full_success_lifecycle(journal: ExecutionJournal):
     assert exec_row["completed_at"] is not None
 
     # Verify leg row
-    leg = journal._conn.execute(
-        "SELECT * FROM execution_legs WHERE id=?", (row_id,)
-    ).fetchone()
+    leg = journal._conn.execute("SELECT * FROM execution_legs WHERE id=?", (row_id,)).fetchone()
     assert leg["status"] == "filled"
     assert leg["order_id"] == "order-abc"
     assert leg["fill_qty"] == 10.0
@@ -73,15 +77,20 @@ def test_failure_lifecycle(journal: ExecutionJournal):
     """Leg failure records error and marks execution failed."""
     journal.record_execution("exec-2", "match-key-2", 1)
     row_id = journal.record_attempt(
-        "exec-2", 0, "polymarket", "TOKEN-1", "no", "buy", 0.55, 5.0,
+        "exec-2",
+        0,
+        "polymarket",
+        "TOKEN-1",
+        "no",
+        "buy",
+        0.55,
+        5.0,
     )
     journal.mark_sent(row_id)
     journal.record_result(row_id, None, "failed", error="API timeout")
     journal.record_completion("exec-2", False)
 
-    leg = journal._conn.execute(
-        "SELECT * FROM execution_legs WHERE id=?", (row_id,)
-    ).fetchone()
+    leg = journal._conn.execute("SELECT * FROM execution_legs WHERE id=?", (row_id,)).fetchone()
     assert leg["status"] == "failed"
     assert leg["order_id"] is None
     assert leg["error"] == "API timeout"
@@ -96,15 +105,20 @@ def test_cancel_lifecycle(journal: ExecutionJournal):
     """Cancellation updates leg status."""
     journal.record_execution("exec-3", "mk-3", 2)
     row_id = journal.record_attempt(
-        "exec-3", 0, "kalshi", "T-1", "yes", "buy", 0.30, 10.0,
+        "exec-3",
+        0,
+        "kalshi",
+        "T-1",
+        "yes",
+        "buy",
+        0.30,
+        10.0,
     )
     journal.mark_sent(row_id)
     journal.record_result(row_id, "k-ord-1", "filled")
     journal.record_cancel(row_id, "cancelled")
 
-    leg = journal._conn.execute(
-        "SELECT * FROM execution_legs WHERE id=?", (row_id,)
-    ).fetchone()
+    leg = journal._conn.execute("SELECT * FROM execution_legs WHERE id=?", (row_id,)).fetchone()
     assert leg["status"] == "cancelled"
 
 
@@ -148,9 +162,7 @@ def test_mark_orphaned(journal: ExecutionJournal):
     journal.mark_orphaned(r)
     assert journal.get_orphans() == []
 
-    leg = journal._conn.execute(
-        "SELECT status FROM execution_legs WHERE id=?", (r,)
-    ).fetchone()
+    leg = journal._conn.execute("SELECT status FROM execution_legs WHERE id=?", (r,)).fetchone()
     assert leg["status"] == "orphaned"
 
 
@@ -208,12 +220,12 @@ def test_get_history_limit(journal: ExecutionJournal):
 
 def test_duplicate_execution_id_rejected(journal: ExecutionJournal):
     journal.record_execution("exec-dup", "mk-dup", 1)
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         journal.record_execution("exec-dup", "mk-dup", 1)
 
 
 def test_duplicate_leg_index_rejected(journal: ExecutionJournal):
     journal.record_execution("exec-legdup", "mk-ld", 2)
     journal.record_attempt("exec-legdup", 0, "kalshi", "T-1", "yes", "buy", 0.40, 10.0)
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         journal.record_attempt("exec-legdup", 0, "kalshi", "T-1", "yes", "buy", 0.40, 10.0)

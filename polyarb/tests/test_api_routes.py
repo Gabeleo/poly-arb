@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from starlette.testclient import TestClient
 
 from polyarb.api.app import create_app
@@ -9,7 +11,6 @@ from polyarb.config import Config
 from polyarb.daemon.state import State
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import ArbType, Market, Opportunity, Side, Token
-
 
 # ── Helpers ────────────────────────────────────────────────
 
@@ -68,11 +69,11 @@ def test_health_ready_before_first_scan():
 
 
 def test_health_ready_after_scan():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     state = State(config=Config())
     state.scan_count = 1
-    state.last_scan_at = datetime.now(timezone.utc)
+    state.last_scan_at = datetime.now(UTC)
     client = _client(state)
     resp = client.get("/health/ready")
     assert resp.status_code == 200
@@ -88,8 +89,13 @@ def test_status_returns_fields():
     resp = _client().get("/status")
     assert resp.status_code == 200
     data = resp.json()
-    for key in ("uptime_seconds", "scan_count", "connected_clients",
-                "match_count", "opportunity_count"):
+    for key in (
+        "uptime_seconds",
+        "scan_count",
+        "connected_clients",
+        "match_count",
+        "opportunity_count",
+    ):
         assert key in data
 
 

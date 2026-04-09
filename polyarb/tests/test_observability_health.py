@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from polyarb.config import Config
 from polyarb.daemon.state import State
@@ -18,7 +18,7 @@ async def test_liveness_always_returns_alive():
 async def test_readiness_after_first_scan():
     state = State(config=Config())
     state.scan_count = 1
-    state.last_scan_at = datetime.now(timezone.utc)
+    state.last_scan_at = datetime.now(UTC)
 
     ready, detail = await check_readiness(state)
     assert ready is True
@@ -38,7 +38,7 @@ async def test_readiness_with_stale_scan():
     state = State(config=Config(scan_interval=5.0))
     state.scan_count = 5
     # Last scan was 30 seconds ago, threshold is 2×5=10s
-    state.last_scan_at = datetime.now(timezone.utc) - timedelta(seconds=30)
+    state.last_scan_at = datetime.now(UTC) - timedelta(seconds=30)
 
     ready, detail = await check_readiness(state)
     assert ready is False
@@ -47,7 +47,7 @@ async def test_readiness_with_stale_scan():
 async def test_deep_health_all_ok():
     state = State(config=Config())
     state.scan_count = 1
-    state.last_scan_at = datetime.now(timezone.utc)
+    state.last_scan_at = datetime.now(UTC)
 
     class OkEncoder:
         async def health(self) -> bool:
@@ -72,7 +72,7 @@ async def test_deep_health_all_ok():
 async def test_deep_health_partial_failure():
     state = State(config=Config())
     state.scan_count = 1
-    state.last_scan_at = datetime.now(timezone.utc)
+    state.last_scan_at = datetime.now(UTC)
 
     class FailEncoder:
         async def health(self) -> bool:
@@ -91,7 +91,7 @@ async def test_deep_health_partial_failure():
 async def test_deep_health_timeout():
     state = State(config=Config())
     state.scan_count = 1
-    state.last_scan_at = datetime.now(timezone.utc)
+    state.last_scan_at = datetime.now(UTC)
 
     class SlowProvider:
         async def search_markets(self, q, limit=1):

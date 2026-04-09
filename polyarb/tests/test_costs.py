@@ -1,14 +1,12 @@
 """Tests for cross-platform arbitrage cost model."""
 
 from polyarb.analysis.costs import (
-    ArbResult,
     FeeParams,
     compute_arb,
     is_profitable,
     kalshi_entry_fee,
     poly_taker_fee,
 )
-
 
 # ── Fee calculations ──────────────────────────────────────────
 
@@ -143,6 +141,8 @@ def test_custom_fee_params():
     result_high = compute_arb(0.45, 0.58, 0.53, 0.50, fees=fees_high)
     result_zero = compute_arb(0.45, 0.58, 0.53, 0.50, fees=fees_zero)
 
+    assert result_zero is not None
+    assert result_high is not None
     assert result_zero.net_profit > result_high.net_profit
     # With zero fees the raw delta is the full profit
     assert abs(result_zero.net_profit - (1.0 - 0.45 - 0.50)) < 1e-6
@@ -163,6 +163,7 @@ def test_breakeven_threshold():
         kalshi_yes_ask=0.56,
         kalshi_no_ask=0.48,
     )
+    assert result_4c is not None
     assert result_4c.gross_cost == 0.96  # 4¢ raw delta
     assert is_profitable(result_4c)
 
@@ -173,6 +174,7 @@ def test_breakeven_threshold():
         kalshi_yes_ask=0.55,
         kalshi_no_ask=0.49,
     )
+    assert result_2c is not None
     assert result_2c.gross_cost == 0.98  # 2¢ raw delta
     assert not is_profitable(result_2c)
 
@@ -182,6 +184,7 @@ def test_arb_result_fields():
     fees = FeeParams(poly_fee_rate=0.05, kalshi_fee_cap=0.02)
     result = compute_arb(0.40, 0.62, 0.55, 0.50, fees=fees)
 
+    assert result is not None
     assert result.poly_ask == 0.40
     assert result.kalshi_ask == 0.50
     assert result.gross_cost == 0.90

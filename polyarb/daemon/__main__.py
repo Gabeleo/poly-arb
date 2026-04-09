@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
-import os
 from contextlib import asynccontextmanager
 
 import uvicorn
 
-from polyarb.config import Config
-from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
 from polyarb.api.app import create_app
+from polyarb.config import Config, Settings
+from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 from polyarb.data.async_live import AsyncLiveDataProvider
@@ -28,40 +28,36 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--interval", type=float, default=5.0, help="scan interval in seconds (default 5.0)"
     )
-    p.add_argument(
-        "--log-json", action="store_true", default=True, help="emit JSON logs (default)"
-    )
+    p.add_argument("--log-json", action="store_true", default=True, help="emit JSON logs (default)")
     p.add_argument(
         "--no-log-json", dest="log_json", action="store_false", help="emit human-readable logs"
     )
-    p.add_argument(
-        "--log-level", default="INFO", help="log level (default INFO)"
-    )
+    p.add_argument("--log-level", default=None, help="log level (overrides POLYARB_LOG_LEVEL)")
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     args = _parse_args()
+    settings = Settings()
 
-    # Configure structured logging before anything else
-    log_json = os.environ.get("LOG_FORMAT", "json") == "json" and args.log_json
-    log_level = os.environ.get("LOG_LEVEL", args.log_level)
+    # CLI args override settings for log level
+    log_level = args.log_level or settings.log_level
+    log_json = settings.log_format == "json" and args.log_json
     configure_logging(json_output=log_json, level=log_level)
 
     # Database setup
     from polyarb.api.audit import AuditLogger
-    from polyarb.db.engine import create_engine as create_db_engine, get_database_url
+    from polyarb.db.engine import create_engine as create_db_engine
     from polyarb.db.models import metadata
     from polyarb.db.repositories.audit import SqliteAuditRepository
     from polyarb.db.repositories.matches import SqliteMatchSnapshotRepository
 
-    db_url = get_database_url()
-    db_engine = create_db_engine(db_url)
+    db_engine = create_db_engine(settings.database_url)
     metadata.create_all(db_engine)
     match_repo = SqliteMatchSnapshotRepository(db_engine)
     audit_repo = SqliteAuditRepository(db_engine)
     audit_logger = AuditLogger(repo=audit_repo)
-    logger.info("Database: %s", db_url)
+    logger.info("Database: %s", settings.database_url)
 
     config = Config(scan_interval=args.interval)
     state = State(config=config)
@@ -71,14 +67,12 @@ def main() -> None:
 
     # Optional authenticated Kalshi client for execution
     kalshi_client = None
-    kalshi_api_key = os.environ.get("KALSHI_API_KEY")
-    key_file = os.environ.get("KALSHI_KEY_FILE")
-    if kalshi_api_key and key_file:
+    if settings.kalshi_api_key and settings.kalshi_key_file:
         try:
             from polyarb.execution.async_kalshi import AsyncKalshiClient
             from polyarb.execution.kalshi import KalshiAuth
 
-            auth = KalshiAuth(kalshi_api_key, key_file)
+            auth = KalshiAuth(settings.kalshi_api_key, settings.kalshi_key_file)
             kalshi_client = AsyncKalshiClient(auth)
             logger.info("Kalshi execution client configured")
         except Exception as exc:
@@ -87,31 +81,35 @@ def main() -> None:
     # Optional Telegram notifications
     telegram_bot = None
     approval_manager = None
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if bot_token and chat_id:
-        from polyarb.notifications.telegram import TelegramBot
+    if settings.telegram_bot_token and settings.telegram_chat_id:
         from polyarb.notifications.approval import ApprovalManager
+        from polyarb.notifications.telegram import TelegramBot
 
-        telegram_bot = TelegramBot(token=bot_token, chat_id=chat_id)
-        approval_manager = ApprovalManager(
-            state=state, bot=telegram_bot,
-            kalshi_client=kalshi_client, config=config,
+        telegram_bot = TelegramBot(
+            token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
         )
-        logger.info("Telegram notifications enabled (chat_id=%s)", chat_id)
+        approval_manager = ApprovalManager(
+            state=state,
+            bot=telegram_bot,
+            kalshi_client=kalshi_client,
+            config=config,
+        )
+        logger.info("Telegram notifications enabled (chat_id=%s)", settings.telegram_chat_id)
     else:
-        logger.info("Telegram not configured (set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)")
+        logger.info(
+            "Telegram not configured (set POLYARB_TELEGRAM_BOT_TOKEN and POLYARB_TELEGRAM_CHAT_ID)"
+        )
 
     # Optional cross-encoder verification
     encoder_client = None
-    encoder_url = os.environ.get("ENCODER_URL")
-    if encoder_url:
+    if settings.encoder_url:
         from polyarb.matching.encoder_client import EncoderClient
 
-        encoder_client = EncoderClient(encoder_url)
-        logger.info("Cross-encoder verification enabled (%s)", encoder_url)
+        encoder_client = EncoderClient(settings.encoder_url)
+        logger.info("Cross-encoder verification enabled (%s)", settings.encoder_url)
     else:
-        logger.info("Cross-encoder not configured (set ENCODER_URL)")
+        logger.info("Cross-encoder not configured (set POLYARB_ENCODER_URL)")
 
     # Optional bi-encoder pre-filter (local sentence embeddings)
     biencoder = None
@@ -131,18 +129,22 @@ def main() -> None:
         # startup
         scan_task = asyncio.get_event_loop().create_task(
             run_scan_loop(
-                state, poly, kalshi, approval_manager, telegram_bot, encoder_client,
-                stop_event=stop_event, biencoder=biencoder,
+                state,
+                poly,
+                kalshi,
+                approval_manager,
+                telegram_bot,
+                encoder_client,
+                stop_event=stop_event,
+                biencoder=biencoder,
                 match_repo=match_repo,
             )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)
 
-        if telegram_bot is not None:
-            webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
-            if webhook_url:
-                await telegram_bot.set_webhook(f"{webhook_url}/telegram/webhook")
-                logger.info("Telegram webhook registered: %s", webhook_url)
+        if telegram_bot is not None and settings.telegram_webhook_url:
+            await telegram_bot.set_webhook(f"{settings.telegram_webhook_url}/telegram/webhook")
+            logger.info("Telegram webhook registered: %s", settings.telegram_webhook_url)
 
         yield
 
@@ -151,13 +153,11 @@ def main() -> None:
         stop_event.set()
         try:
             await asyncio.wait_for(scan_task, timeout=FETCH_TIMEOUT + 10)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Scan did not finish in time, cancelling")
             scan_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await scan_task
-            except asyncio.CancelledError:
-                pass
         except asyncio.CancelledError:
             pass
 
@@ -171,8 +171,7 @@ def main() -> None:
             await encoder_client.close()
         logger.info("Daemon stopped")
 
-    api_key = os.environ.get("POLYARB_API_KEY")
-    if api_key:
+    if settings.api_key:
         logger.info("API key authentication enabled")
     else:
         logger.warning("POLYARB_API_KEY not set — protected endpoints are unauthenticated")
@@ -183,7 +182,7 @@ def main() -> None:
         lifespan=lifespan,
         approval_manager=approval_manager,
         telegram_bot=telegram_bot,
-        api_key=api_key,
+        api_key=settings.api_key or None,
         encoder_client=encoder_client,
         poly_provider=poly,
         kalshi_provider=kalshi,

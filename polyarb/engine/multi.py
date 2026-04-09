@@ -17,23 +17,27 @@ def detect_multi(events: list[Event], config: Config) -> list[Opportunity]:
         yes_ask_sum = sum(m.yes_token.best_ask for m in event.markets)
         underprice_profit = 1.0 - yes_ask_sum
         if underprice_profit >= config.min_profit:
-            opps.append(Opportunity(
-                arb_type=ArbType.MULTI_UNDERPRICE,
-                markets=event.markets,
-                event=event,
-                expected_profit_per_share=round(underprice_profit, 6),
-            ))
+            opps.append(
+                Opportunity(
+                    arb_type=ArbType.MULTI_UNDERPRICE,
+                    markets=event.markets,
+                    event=event,
+                    expected_profit_per_share=round(underprice_profit, 6),
+                )
+            )
 
         # Overprice: buy all NO at ask, (N-1) pay $1
         no_ask_sum = sum(m.no_token.best_ask for m in event.markets)
         n = len(event.markets)
         overprice_profit = (n - 1) - no_ask_sum
         if overprice_profit >= config.min_profit:
-            opps.append(Opportunity(
-                arb_type=ArbType.MULTI_OVERPRICE,
-                markets=event.markets,
-                event=event,
-                expected_profit_per_share=round(overprice_profit, 6),
-            ))
+            opps.append(
+                Opportunity(
+                    arb_type=ArbType.MULTI_OVERPRICE,
+                    markets=event.markets,
+                    event=event,
+                    expected_profit_per_share=round(overprice_profit, 6),
+                )
+            )
 
     return opps

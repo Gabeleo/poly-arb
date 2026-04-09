@@ -47,7 +47,9 @@ async def resolve_orphan(
     if client is None:
         logger.warning(
             "No %s client available to resolve orphan %d (%s)",
-            platform, row_id, ticker,
+            platform,
+            row_id,
+            ticker,
         )
         journal.mark_orphaned(row_id)
         return "manual_review"
@@ -57,13 +59,17 @@ async def resolve_orphan(
             positions = await client.get_positions(ticker=ticker)
             if positions:
                 logger.info(
-                    "Orphan %d: found position for %s on Kalshi", row_id, ticker,
+                    "Orphan %d: found position for %s on Kalshi",
+                    row_id,
+                    ticker,
                 )
                 journal.record_result(row_id, None, "filled")
                 return "confirmed_fill"
             else:
                 logger.info(
-                    "Orphan %d: no position for %s on Kalshi", row_id, ticker,
+                    "Orphan %d: no position for %s on Kalshi",
+                    row_id,
+                    ticker,
                 )
                 journal.record_result(row_id, None, "failed", error="no position found")
                 return "confirmed_no_fill"

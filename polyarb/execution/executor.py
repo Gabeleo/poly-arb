@@ -18,9 +18,11 @@ class MockExecutor:
     def execute(self, order_set: OrderSet) -> bool:
         self.trades.append(order_set)
         self.total_profit += order_set.expected_profit
-        print(f"\033[92m  ✓ Paper trade executed. "
-              f"Profit=${order_set.expected_profit:.4f} "
-              f"| Cumulative=${self.total_profit:.4f}\033[0m")
+        print(
+            f"\033[92m  ✓ Paper trade executed. "
+            f"Profit=${order_set.expected_profit:.4f} "
+            f"| Cumulative=${self.total_profit:.4f}\033[0m"
+        )
         return True
 
 

@@ -16,7 +16,7 @@ class Config:
     match_candidate_threshold: float = 0.15
     match_final_threshold: float = 0.5
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         if self.min_profit < 0:
             raise ValueError("min_profit must be >= 0")
         if not (0.0 < self.max_prob <= 1.0):

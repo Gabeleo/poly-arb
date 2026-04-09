@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from hashlib import sha256
 
@@ -196,5 +196,7 @@ class OrderSet:
         lines = [f"OrderSet ({self.opportunity.arb_type.value}):"]
         for o in self.orders:
             lines.append(f"  {o.describe()}")
-        lines.append(f"  Cost=${self.total_cost:.4f} Payout=${self.expected_payout:.4f} Profit=${self.expected_profit:.4f}")
+        lines.append(
+            f"  Cost=${self.total_cost:.4f} Payout=${self.expected_payout:.4f} Profit=${self.expected_profit:.4f}"
+        )
         return "\n".join(lines)

@@ -1,7 +1,13 @@
 from polyarb.config import Config
 from polyarb.execution.orders import build_order_set
 from polyarb.models import (
-    Action, ArbType, Event, Market, Opportunity, Side, Token,
+    Action,
+    ArbType,
+    Event,
+    Market,
+    Opportunity,
+    Side,
+    Token,
 )
 
 
@@ -51,7 +57,9 @@ def test_multi_underprice_orders():
     config = Config(order_size=5)
     markets = (_market("a", 0.40, 0.60), _market("b", 0.30, 0.70), _market("c", 0.20, 0.80))
     event = Event("e", "Test", markets)
-    opp = Opportunity(ArbType.MULTI_UNDERPRICE, markets, event=event, expected_profit_per_share=0.10)
+    opp = Opportunity(
+        ArbType.MULTI_UNDERPRICE, markets, event=event, expected_profit_per_share=0.10
+    )
     os = build_order_set(opp, config)
 
     assert len(os.orders) == 3

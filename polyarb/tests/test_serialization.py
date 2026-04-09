@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import (
@@ -74,7 +74,7 @@ def test_token_to_dict_no_side():
 
 
 def test_market_to_dict_with_end_date():
-    dt = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    dt = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
     m = _make_market(end_date=dt)
     d = m.to_dict()
     assert d["condition_id"] == "cond_1"
@@ -199,7 +199,9 @@ def test_matchedpair_to_dict():
     kalshi = Market(
         condition_id="kalshi_1",
         question="Will X happen?",
-        yes_token=Token(token_id="k_yes", side=Side.YES, midpoint=0.65, best_bid=0.64, best_ask=0.66),
+        yes_token=Token(
+            token_id="k_yes", side=Side.YES, midpoint=0.65, best_bid=0.64, best_ask=0.66
+        ),
         no_token=Token(token_id="k_no", side=Side.NO, midpoint=0.35, best_bid=0.34, best_ask=0.36),
         platform="kalshi",
     )

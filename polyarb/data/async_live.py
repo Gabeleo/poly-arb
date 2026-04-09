@@ -105,13 +105,16 @@ class AsyncLiveDataProvider:
         return resp.json()
 
     async def get_active_markets(self) -> list[Market]:
-        data = await self._fetch_json("/markets", {
-            "limit": str(self._limit),
-            "order": "volumeNum",
-            "ascending": "false",
-            "active": "true",
-            "closed": "false",
-        })
+        data = await self._fetch_json(
+            "/markets",
+            {
+                "limit": str(self._limit),
+                "order": "volumeNum",
+                "ascending": "false",
+                "active": "true",
+                "closed": "false",
+            },
+        )
         raw_list = data if isinstance(data, list) else [data]
         markets = []
         for raw in raw_list:
@@ -127,13 +130,16 @@ class AsyncLiveDataProvider:
     async def search_markets(self, query: str, limit: int = 5) -> list[Market]:
         """Search markets by name, sorted by 24h volume descending."""
         fetch_limit = min(max(limit * 10, 100), 500)
-        data = await self._fetch_json("/markets", {
-            "limit": str(fetch_limit),
-            "order": "volumeNum",
-            "ascending": "false",
-            "active": "true",
-            "closed": "false",
-        })
+        data = await self._fetch_json(
+            "/markets",
+            {
+                "limit": str(fetch_limit),
+                "order": "volumeNum",
+                "ascending": "false",
+                "active": "true",
+                "closed": "false",
+            },
+        )
         raw_list = data if isinstance(data, list) else [data]
         markets = [m for raw in raw_list if (m := _parse_market(raw)) is not None]
         q = query.lower()

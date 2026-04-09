@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from polyarb.observability.context import request_id_var, scan_id_var
 
@@ -19,9 +19,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         entry: dict = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -34,6 +32,7 @@ class JsonFormatter(logging.Formatter):
                 entry["exception"] = self.formatException(record.exc_info)
             elif record.exc_info is True:
                 import sys
+
                 exc_info = sys.exc_info()
                 if exc_info[0] is not None:
                     entry["exception"] = self.formatException(exc_info)
@@ -51,9 +50,7 @@ class HumanFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%S"
-        )
+        ts = datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S")
         sid = scan_id_var.get()
         rid = request_id_var.get()
         ctx = sid or rid

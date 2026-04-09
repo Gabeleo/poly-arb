@@ -25,9 +25,17 @@ def test_openapi_returns_valid_spec():
 def test_openapi_contains_all_paths():
     data = _client().get("/openapi.json").json()
     expected = [
-        "/health", "/health/live", "/health/ready", "/health/deep",
-        "/status", "/matches", "/matches/{id}",
-        "/opportunities", "/config", "/execute/{id}", "/metrics",
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/health/deep",
+        "/status",
+        "/matches",
+        "/matches/{id}",
+        "/opportunities",
+        "/config",
+        "/execute/{id}",
+        "/metrics",
     ]
     for path in expected:
         assert path in data["paths"], f"Missing path: {path}"

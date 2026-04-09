@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from starlette.requests import Request
@@ -49,10 +50,8 @@ async def telegram_webhook(request: Request) -> JSONResponse:
         logger.exception("Webhook handler error")
     finally:
         if callback_id:
-            try:
+            with contextlib.suppress(Exception):
                 await telegram_bot.answer_callback(callback_id)
-            except Exception:
-                pass
 
     return JSONResponse({"ok": True})
 

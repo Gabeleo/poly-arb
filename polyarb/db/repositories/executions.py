@@ -2,31 +2,49 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import insert, select, update, func
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.engine import Engine
 
 from polyarb.db.models import execution_legs, executions
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class ExecutionRepository(Protocol):
     """Read/write execution journal."""
 
-    def record_execution(self, execution_id: str, match_key: str, leg_count: int,
-                         idempotency_key: str | None = None) -> None: ...
-    def record_attempt(self, execution_id: str, leg_index: int, platform: str,
-                       ticker: str, side: str, action: str, price: float, size: float) -> int: ...
+    def record_execution(
+        self, execution_id: str, match_key: str, leg_count: int, idempotency_key: str | None = None
+    ) -> None: ...
+    def record_attempt(
+        self,
+        execution_id: str,
+        leg_index: int,
+        platform: str,
+        ticker: str,
+        side: str,
+        action: str,
+        price: float,
+        size: float,
+    ) -> int: ...
     def mark_sent(self, row_id: int) -> None: ...
-    def record_result(self, row_id: int, order_id: str | None, status: str,
-                      fill_qty: float | None = None, error: str | None = None) -> None: ...
+    def record_result(
+        self,
+        row_id: int,
+        order_id: str | None,
+        status: str,
+        fill_qty: float | None = None,
+        error: str | None = None,
+    ) -> None: ...
     def record_cancel(self, row_id: int, cancel_status: str) -> None: ...
-    def record_completion(self, execution_id: str, success: bool, profit: float | None = None) -> None: ...
+    def record_completion(
+        self, execution_id: str, success: bool, profit: float | None = None
+    ) -> None: ...
     def find_by_idempotency_key(self, key: str) -> dict | None: ...
     def get_orphans(self) -> list[dict]: ...
     def mark_orphaned(self, row_id: int) -> None: ...
@@ -41,7 +59,10 @@ class SqliteExecutionRepository:
         self._engine = engine
 
     def record_execution(
-        self, execution_id: str, match_key: str, leg_count: int,
+        self,
+        execution_id: str,
+        match_key: str,
+        leg_count: int,
         idempotency_key: str | None = None,
     ) -> None:
         with self._engine.begin() as conn:
@@ -58,18 +79,29 @@ class SqliteExecutionRepository:
     def find_by_idempotency_key(self, key: str) -> dict | None:
         """Return the most recent non-failed execution with this key, or None."""
         with self._engine.connect() as conn:
-            row = conn.execute(
-                select(executions)
-                .where(executions.c.idempotency_key == key)
-                .where(executions.c.status != "failed")
-                .order_by(executions.c.id.desc())
-                .limit(1)
-            ).mappings().first()
+            row = (
+                conn.execute(
+                    select(executions)
+                    .where(executions.c.idempotency_key == key)
+                    .where(executions.c.status != "failed")
+                    .order_by(executions.c.id.desc())
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def record_attempt(
-        self, execution_id: str, leg_index: int, platform: str,
-        ticker: str, side: str, action: str, price: float, size: float,
+        self,
+        execution_id: str,
+        leg_index: int,
+        platform: str,
+        ticker: str,
+        side: str,
+        action: str,
+        price: float,
+        size: float,
     ) -> int:
         with self._engine.begin() as conn:
             result = conn.execute(
@@ -84,7 +116,10 @@ class SqliteExecutionRepository:
                     size=size,
                 )
             )
-            return result.inserted_primary_key[0]
+            pk = result.inserted_primary_key
+            if pk is None:
+                raise RuntimeError("INSERT did not return a primary key")
+            return pk[0]
 
     def mark_sent(self, row_id: int) -> None:
         with self._engine.begin() as conn:
@@ -95,8 +130,12 @@ class SqliteExecutionRepository:
             )
 
     def record_result(
-        self, row_id: int, order_id: str | None, status: str,
-        fill_qty: float | None = None, error: str | None = None,
+        self,
+        row_id: int,
+        order_id: str | None,
+        status: str,
+        fill_qty: float | None = None,
+        error: str | None = None,
     ) -> None:
         with self._engine.begin() as conn:
             conn.execute(
@@ -120,7 +159,10 @@ class SqliteExecutionRepository:
             )
 
     def record_completion(
-        self, execution_id: str, success: bool, profit: float | None = None,
+        self,
+        execution_id: str,
+        success: bool,
+        profit: float | None = None,
     ) -> None:
         status = "completed" if success else "failed"
         with self._engine.begin() as conn:
@@ -132,9 +174,11 @@ class SqliteExecutionRepository:
 
     def get_orphans(self) -> list[dict]:
         with self._engine.connect() as conn:
-            rows = conn.execute(
-                select(execution_legs).where(execution_legs.c.status == "sent")
-            ).mappings().all()
+            rows = (
+                conn.execute(select(execution_legs).where(execution_legs.c.status == "sent"))
+                .mappings()
+                .all()
+            )
         return [dict(r) for r in rows]
 
     def mark_orphaned(self, row_id: int) -> None:
@@ -155,18 +199,24 @@ class SqliteExecutionRepository:
 
     def get_history(self, limit: int = 50) -> list[dict]:
         with self._engine.connect() as conn:
-            rows = conn.execute(
-                select(executions).order_by(executions.c.id.desc()).limit(limit)
-            ).mappings().all()
+            rows = (
+                conn.execute(select(executions).order_by(executions.c.id.desc()).limit(limit))
+                .mappings()
+                .all()
+            )
 
             result = []
             for row in rows:
                 exec_dict = dict(row)
-                legs = conn.execute(
-                    select(execution_legs)
-                    .where(execution_legs.c.execution_id == exec_dict["execution_id"])
-                    .order_by(execution_legs.c.leg_index)
-                ).mappings().all()
+                legs = (
+                    conn.execute(
+                        select(execution_legs)
+                        .where(execution_legs.c.execution_id == exec_dict["execution_id"])
+                        .order_by(execution_legs.c.leg_index)
+                    )
+                    .mappings()
+                    .all()
+                )
                 exec_dict["legs"] = [dict(leg) for leg in legs]
                 result.append(exec_dict)
         return result

@@ -39,7 +39,7 @@ class _TokenBucket:
 
 _EXEMPT_PREFIXES = ("/health", "/metrics")
 _PRUNE_INTERVAL = 100  # prune stale buckets every N requests
-_STALE_SECONDS = 300   # remove clients not seen for 5 minutes
+_STALE_SECONDS = 300  # remove clients not seen for 5 minutes
 
 
 class RateLimitMiddleware:

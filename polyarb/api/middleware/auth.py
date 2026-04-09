@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket
@@ -37,9 +36,7 @@ class ApiKeyMiddleware:
                 headers = dict(scope.get("headers", []))
                 key = headers.get(b"x-api-key", b"").decode()
                 if key != self._api_key:
-                    resp = JSONResponse(
-                        {"error": "unauthorized"}, status_code=401
-                    )
+                    resp = JSONResponse({"error": "unauthorized"}, status_code=401)
                     await resp(scope, receive, send)
                     return
 

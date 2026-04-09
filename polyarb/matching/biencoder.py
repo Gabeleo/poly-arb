@@ -49,7 +49,7 @@ class BiEncoderFilter:
 
         if to_encode:
             vectors = self._model.encode(to_encode, batch_size=64)
-            for s, vec in zip(to_encode, vectors):
+            for s, vec in zip(to_encode, vectors, strict=True):
                 self._cache[s] = vec
                 self._cache.move_to_end(s)
 
@@ -106,7 +106,4 @@ class BiEncoderFilter:
         scored.sort(key=lambda t: t[0], reverse=True)
         top = scored[:max_keep]
 
-        return [
-            MatchedPair(c.poly_market, c.kalshi_market, score)
-            for score, c in top
-        ]
+        return [MatchedPair(c.poly_market, c.kalshi_market, score) for score, c in top]

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
-
 import pytest
 
 from polyarb.config import Config
 from polyarb.daemon.state import State
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Market, Side, Token
-from polyarb.notifications.approval import ApprovalManager, PendingApproval
-
+from polyarb.notifications.approval import ApprovalManager
 
 # ── Fake dependencies ──────��───────────────────────────────
 
@@ -102,7 +98,7 @@ def _make_manager(
     st = state or State(config=cfg)
     b = bot or FakeBot()
     k = kalshi or FakeKalshiClient()
-    mgr = ApprovalManager(state=st, bot=b, kalshi_client=k, config=cfg)
+    mgr = ApprovalManager(state=st, bot=b, kalshi_client=k, config=cfg)  # type: ignore[arg-type]
     return mgr, b, k, st
 
 

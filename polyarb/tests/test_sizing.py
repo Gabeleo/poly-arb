@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from polyarb.sizing import kelly_fraction_raw, kelly_size
-
 
 # ── kelly_fraction_raw ───────────────────────────────────────
 

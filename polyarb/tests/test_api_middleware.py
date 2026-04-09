@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
+import pytest
 from starlette.testclient import TestClient
 
 from polyarb.api.app import create_app
@@ -53,11 +54,7 @@ def test_auth_blocks_ws_without_key():
     app = create_app(state, api_key="secret")
     client = TestClient(app)
     # WebSocket without api_key param should be rejected with 4003
-    try:
-        with client.websocket_connect("/ws"):
-            pass
-        assert False, "should have raised"
-    except Exception:
+    with pytest.raises(Exception), client.websocket_connect("/ws"):  # noqa: B017
         pass
 
 
@@ -171,10 +168,19 @@ def test_xff_multiple_ips_uses_leftmost():
         client = TestClient(app)
 
         # Both requests have same leftmost IP (203.0.113.50)
-        assert client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.1"}).status_code == 200
-        assert client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.2"}).status_code == 200
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.1"}).status_code
+            == 200
+        )
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.2"}).status_code
+            == 200
+        )
         # Third from same leftmost should be rate limited
-        assert client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.3"}).status_code == 429
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "203.0.113.50, 10.0.0.3"}).status_code
+            == 429
+        )
 
 
 def test_x_real_ip_fallback():
@@ -208,11 +214,14 @@ def test_no_proxy_headers_uses_scope_client():
 def test_trusted_proxy_count_strips_spoofed():
     """TRUSTED_PROXY_COUNT=1 takes second-from-right, ignoring spoofed leftmost."""
     state = State(config=Config())
-    with patch.dict(os.environ, {
-        "RATE_LIMIT_PER_MIN": "2",
-        "RATE_LIMIT_BURST": "2",
-        "TRUSTED_PROXY_COUNT": "1",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "RATE_LIMIT_PER_MIN": "2",
+            "RATE_LIMIT_BURST": "2",
+            "TRUSTED_PROXY_COUNT": "1",
+        },
+    ):
         app = create_app(state)
         client = TestClient(app)
 
@@ -230,11 +239,14 @@ def test_trusted_proxy_count_strips_spoofed():
 def test_trusted_proxy_count_zero_uses_leftmost():
     """TRUSTED_PROXY_COUNT=0 behaves like unset — uses leftmost entry."""
     state = State(config=Config())
-    with patch.dict(os.environ, {
-        "RATE_LIMIT_PER_MIN": "2",
-        "RATE_LIMIT_BURST": "2",
-        "TRUSTED_PROXY_COUNT": "0",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "RATE_LIMIT_PER_MIN": "2",
+            "RATE_LIMIT_BURST": "2",
+            "TRUSTED_PROXY_COUNT": "0",
+        },
+    ):
         app = create_app(state)
         client = TestClient(app)
 
@@ -252,7 +264,16 @@ def test_xff_whitespace_handling():
         client = TestClient(app)
 
         # "10.0.0.1 , 10.0.0.2" — extracted IP should be "10.0.0.1" (stripped)
-        assert client.get("/status", headers={"X-Forwarded-For": "  10.0.0.1 , 10.0.0.2"}).status_code == 200
-        assert client.get("/status", headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.2"}).status_code == 200
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "  10.0.0.1 , 10.0.0.2"}).status_code
+            == 200
+        )
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.2"}).status_code
+            == 200
+        )
         # Same IP after stripping — should share bucket
-        assert client.get("/status", headers={"X-Forwarded-For": "10.0.0.1 , 10.0.0.2"}).status_code == 429
+        assert (
+            client.get("/status", headers={"X-Forwarded-For": "10.0.0.1 , 10.0.0.2"}).status_code
+            == 429
+        )

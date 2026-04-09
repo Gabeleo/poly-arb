@@ -30,13 +30,13 @@ services:
       - .env
     environment:
       - POLYARB_API_KEY=${POLYARB_API_KEY:-}
-      - ENCODER_URL=${ENCODER_URL:-http://encoder:8000}
-      - KALSHI_API_KEY=${KALSHI_API_KEY:-}
-      - KALSHI_KEY_FILE=/run/secrets/kalshi_key
-      - KALSHI_ENV=${KALSHI_ENV:-demo}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
+      - POLYARB_ENCODER_URL=${POLYARB_ENCODER_URL:-http://encoder:8000}
+      - POLYARB_KALSHI_API_KEY=${POLYARB_KALSHI_API_KEY:-}
+      - POLYARB_KALSHI_KEY_FILE=/run/secrets/kalshi_key
+      - POLYARB_DATABASE_URL=${POLYARB_DATABASE_URL:-sqlite:///polyarb.db}
+      - POLYARB_TELEGRAM_BOT_TOKEN=${POLYARB_TELEGRAM_BOT_TOKEN:-}
+      - POLYARB_TELEGRAM_CHAT_ID=${POLYARB_TELEGRAM_CHAT_ID:-}
+      - POLYARB_TELEGRAM_WEBHOOK_URL=${POLYARB_TELEGRAM_WEBHOOK_URL:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - http_proxy=${http_proxy:-}

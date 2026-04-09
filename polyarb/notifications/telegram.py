@@ -145,10 +145,13 @@ class TelegramBot:
             lines.append(f"{i}. [{arb_label}] ${opp.expected_profit_per_share:.4f}  {q}")
 
         text = "\n".join(lines)
-        result = await self._post("sendMessage", {
-            "chat_id": self._chat_id,
-            "text": text,
-        })
+        result = await self._post(
+            "sendMessage",
+            {
+                "chat_id": self._chat_id,
+                "text": text,
+            },
+        )
         return result.get("result", {}).get("message_id", 0)
 
     async def set_webhook(self, url: str) -> None:

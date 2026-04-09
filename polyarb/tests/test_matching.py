@@ -1,9 +1,13 @@
 """Tests for cross-platform market matching."""
 
+from polyarb.matching.matcher import (
+    _containment,
+    _jaccard,
+    find_matches,
+    generate_all_pairs,
+)
 from polyarb.matching.normalize import extract_years, normalize, tokenize
-from polyarb.matching.matcher import MatchedPair, find_matches, generate_all_pairs, _jaccard, _containment
 from polyarb.models import Market, Side, Token
-
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -145,7 +149,7 @@ def test_arb_profit_calculation():
     assert len(matches) == 1
     pair = matches[0]
     assert pair.profit_buy_kalshi_yes == round(1.0 - 0.41 - 0.51, 4)  # 0.08
-    assert pair.profit_buy_poly_yes == round(1.0 - 0.51 - 0.61, 4)   # -0.12
+    assert pair.profit_buy_poly_yes == round(1.0 - 0.51 - 0.61, 4)  # -0.12
     profit, side, _, _, price = pair.best_arb
     assert profit == round(1.0 - 0.41 - 0.51, 4)
     assert side == "yes"

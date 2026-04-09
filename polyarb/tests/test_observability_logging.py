@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 
+import pytest
+
 from polyarb.observability.context import request_id_var, scan_id_var
 from polyarb.observability.logging import (
     HumanFormatter,
@@ -95,11 +97,8 @@ def test_human_formatter_readable():
     assert "test message" in output
     assert "polyarb.test" in output
     # Should NOT be JSON
-    try:
+    with pytest.raises(json.JSONDecodeError):
         json.loads(output)
-        assert False, "HumanFormatter output should not be valid JSON"
-    except json.JSONDecodeError:
-        pass
 
 
 def test_configure_logging_sets_json_handler():

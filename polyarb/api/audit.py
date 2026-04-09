@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from polyarb.observability.context import request_id_var
 
@@ -20,7 +20,7 @@ class AuditLogger:
     def record(self, action: str, actor: str, details: dict) -> None:
         """Log an audit entry to structured logging and optionally to database."""
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "actor": actor,
             "action": action,
             "details": details,

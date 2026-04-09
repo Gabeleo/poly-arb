@@ -6,7 +6,10 @@ import math
 
 
 def kalshi_taker_fee(
-    contracts: float, price: float, rate: float = 0.07, multiplier: float = 1.0,
+    contracts: float,
+    price: float,
+    rate: float = 0.07,
+    multiplier: float = 1.0,
 ) -> float:
     """Kalshi per-order taker fee, ceiled to the nearest cent.
 
@@ -16,7 +19,9 @@ def kalshi_taker_fee(
 
 
 def poly_taker_fee(
-    shares: float, price: float, fee_rate: float = 0.04,
+    shares: float,
+    price: float,
+    fee_rate: float = 0.04,
 ) -> float:
     """Polymarket per-order taker fee, rounded to 4 decimal places.
 
@@ -41,7 +46,9 @@ def net_profit_single(
         gross = (yes_price + no_price - 1.0) * size
 
     if platform == "kalshi":
-        fee = kalshi_taker_fee(size, yes_price, kalshi_rate) + kalshi_taker_fee(size, no_price, kalshi_rate)
+        fee = kalshi_taker_fee(size, yes_price, kalshi_rate) + kalshi_taker_fee(
+            size, no_price, kalshi_rate
+        )
     else:
         fee = poly_taker_fee(size, yes_price, poly_rate) + poly_taker_fee(size, no_price, poly_rate)
 
@@ -57,5 +64,7 @@ def net_profit_cross(
 ) -> float:
     """Net profit after fees for a cross-platform arb."""
     gross = (1.0 - kalshi_price - poly_price) * size
-    fee = kalshi_taker_fee(size, kalshi_price, kalshi_rate) + poly_taker_fee(size, poly_price, poly_rate)
+    fee = kalshi_taker_fee(size, kalshi_price, kalshi_rate) + poly_taker_fee(
+        size, poly_price, poly_rate
+    )
     return gross - fee

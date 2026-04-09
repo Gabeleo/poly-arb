@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-import tempfile
-import os
 
 import pytest
 from alembic import command

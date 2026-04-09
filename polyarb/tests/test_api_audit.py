@@ -49,13 +49,15 @@ def test_audit_logger_works_without_repo(caplog):
 
 def test_repo_insert_and_retrieve():
     repo = _make_repo()
-    repo.insert_audit_entry({
-        "timestamp": "2026-04-08T00:00:00+00:00",
-        "actor": "api_key",
-        "action": "config_update",
-        "details": {"min_profit": 0.02},
-        "request_id": "abc123",
-    })
+    repo.insert_audit_entry(
+        {
+            "timestamp": "2026-04-08T00:00:00+00:00",
+            "actor": "api_key",
+            "action": "config_update",
+            "details": {"min_profit": 0.02},
+            "request_id": "abc123",
+        }
+    )
     entries = repo.get_entries()
     assert len(entries) == 1
     assert entries[0]["actor"] == "api_key"
@@ -64,16 +66,24 @@ def test_repo_insert_and_retrieve():
 
 def test_repo_filter_by_action():
     repo = _make_repo()
-    repo.insert_audit_entry({
-        "timestamp": "2026-04-08T00:00:00+00:00",
-        "actor": "api_key", "action": "config_update",
-        "details": {}, "request_id": None,
-    })
-    repo.insert_audit_entry({
-        "timestamp": "2026-04-08T00:01:00+00:00",
-        "actor": "api_key", "action": "execute_approve",
-        "details": {}, "request_id": None,
-    })
+    repo.insert_audit_entry(
+        {
+            "timestamp": "2026-04-08T00:00:00+00:00",
+            "actor": "api_key",
+            "action": "config_update",
+            "details": {},
+            "request_id": None,
+        }
+    )
+    repo.insert_audit_entry(
+        {
+            "timestamp": "2026-04-08T00:01:00+00:00",
+            "actor": "api_key",
+            "action": "execute_approve",
+            "details": {},
+            "request_id": None,
+        }
+    )
     config_entries = repo.get_entries(action="config_update")
     assert len(config_entries) == 1
     assert config_entries[0]["action"] == "config_update"
@@ -82,23 +92,30 @@ def test_repo_filter_by_action():
 def test_repo_limit():
     repo = _make_repo()
     for i in range(5):
-        repo.insert_audit_entry({
-            "timestamp": f"2026-04-08T00:0{i}:00+00:00",
-            "actor": "api_key", "action": "test",
-            "details": {"i": i}, "request_id": None,
-        })
+        repo.insert_audit_entry(
+            {
+                "timestamp": f"2026-04-08T00:0{i}:00+00:00",
+                "actor": "api_key",
+                "action": "test",
+                "details": {"i": i},
+                "request_id": None,
+            }
+        )
     entries = repo.get_entries(limit=3)
     assert len(entries) == 3
 
 
 def test_repo_details_serialized_as_json():
     repo = _make_repo()
-    repo.insert_audit_entry({
-        "timestamp": "2026-04-08T00:00:00+00:00",
-        "actor": "api_key", "action": "config_update",
-        "details": {"min_profit": 0.02, "scan_interval": 3.0},
-        "request_id": None,
-    })
+    repo.insert_audit_entry(
+        {
+            "timestamp": "2026-04-08T00:00:00+00:00",
+            "actor": "api_key",
+            "action": "config_update",
+            "details": {"min_profit": 0.02, "scan_interval": 3.0},
+            "request_id": None,
+        }
+    )
     entries = repo.get_entries()
     details = json.loads(entries[0]["details"])
     assert details["min_profit"] == 0.02

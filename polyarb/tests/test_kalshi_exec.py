@@ -5,12 +5,22 @@ import tempfile
 
 import pytest
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding as asym_padding, rsa
+pytest.importorskip("cryptography", reason="cryptography required for kalshi exec tests")
+from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric import padding as asym_padding  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: E402
 
-from polyarb.execution.kalshi import KalshiAuth, KalshiExecutor
-from polyarb.models import Action, ArbType, Market, Opportunity, Order, OrderSet, Side, Token
-
+from polyarb.execution.kalshi import KalshiAuth, KalshiExecutor  # noqa: E402
+from polyarb.models import (  # noqa: E402
+    Action,
+    ArbType,
+    Market,
+    Opportunity,
+    Order,
+    OrderSet,
+    Side,
+    Token,
+)
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -23,9 +33,8 @@ def _gen_rsa_pem() -> tuple[str, object]:
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     )
-    tmp = tempfile.NamedTemporaryFile(suffix=".pem", delete=False)
-    tmp.write(pem_bytes)
-    tmp.close()
+    with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as tmp:
+        tmp.write(pem_bytes)
     return tmp.name, private_key.public_key()
 
 
@@ -45,9 +54,7 @@ def _kalshi_order(
     )
 
 
-def _kalshi_market(
-    ticker: str = "TEST-MKT", yes_mid: float = 0.50
-) -> Market:
+def _kalshi_market(ticker: str = "TEST-MKT", yes_mid: float = 0.50) -> Market:
     return Market(
         condition_id=ticker,
         question="Test",
@@ -72,11 +79,11 @@ def test_auth_loads_key_and_signs():
 
     # Verify signature with the public key
     timestamp = hdrs["KALSHI-ACCESS-TIMESTAMP"]
-    message = f"{timestamp}GET/trade-api/v2/portfolio/balance".encode("utf-8")
+    message = f"{timestamp}GET/trade-api/v2/portfolio/balance".encode()
     sig_bytes = base64.b64decode(hdrs["KALSHI-ACCESS-SIGNATURE"])
 
     # Should not raise
-    pub_key.verify(
+    pub_key.verify(  # type: ignore[attr-defined]
         sig_bytes,
         message,
         asym_padding.PSS(
@@ -102,7 +109,7 @@ def test_auth_strips_query_params():
         ts = hdrs["KALSHI-ACCESS-TIMESTAMP"]
         msg = f"{ts}GET/trade-api/v2/portfolio/positions".encode()
         sig = base64.b64decode(hdrs["KALSHI-ACCESS-SIGNATURE"])
-        pub_key.verify(
+        pub_key.verify(  # type: ignore[attr-defined]
             sig,
             msg,
             asym_padding.PSS(
@@ -198,7 +205,7 @@ def _make_order_set() -> OrderSet:
 
 def test_executor_places_all_orders():
     client = FakeClient(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     result = executor.execute(os)
@@ -215,7 +222,7 @@ def test_executor_places_all_orders():
 
 def test_executor_rejects_insufficient_balance():
     client = FakeClient(balance=1.0)  # Too low
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()  # costs $9.40
 
     result = executor.execute(os)
@@ -226,7 +233,7 @@ def test_executor_rejects_insufficient_balance():
 
 def test_executor_tracks_trades_and_profit():
     client = FakeClient(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     executor.execute(os)
@@ -245,7 +252,7 @@ def test_executor_cancels_on_partial_failure():
             return super().create_order(**kwargs)
 
     client = FailSecondLeg(balance=100.0)
-    executor = KalshiExecutor(client=client)
+    executor = KalshiExecutor(client=client)  # type: ignore[arg-type]
     os = _make_order_set()
 
     result = executor.execute(os)

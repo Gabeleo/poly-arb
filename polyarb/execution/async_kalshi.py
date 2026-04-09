@@ -9,7 +9,7 @@ import json
 
 import httpx
 
-from polyarb.execution.kalshi import KalshiAuth, KALSHI_DEMO, KALSHI_PROD
+from polyarb.execution.kalshi import KALSHI_DEMO, KALSHI_PROD, KalshiAuth
 
 
 class AsyncKalshiClient:

@@ -17,12 +17,14 @@ from polyarb.execution.journal import ExecutionJournal
 from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Market, Side, Token
 
-
 # ── Helpers ───────────────────────────────────────────────────
 
 
 def _mkt(
-    cid: str, platform: str, yes_ask: float, no_ask: float | None = None,
+    cid: str,
+    platform: str,
+    yes_ask: float,
+    no_ask: float | None = None,
 ) -> Market:
     if no_ask is None:
         no_ask = round(1.0 - yes_ask, 4)
@@ -174,7 +176,7 @@ async def test_duplicate_execution_skipped(journal: ExecutionJournal):
     """Same match executed twice in same 60s window -> second is skipped."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
     config = Config()
 
     result1 = await executor.execute(_profitable_match(), config)
@@ -195,7 +197,7 @@ async def test_retry_after_failure_allowed(journal: ExecutionJournal):
     """If first execution fails, retry in the same window should proceed."""
     kalshi_fail = FakeKalshiClient(fail=True)
     poly_fail = FakePolyClient(fail=True)
-    executor_fail = CrossExecutor(kalshi=kalshi_fail, poly=poly_fail, journal=journal)
+    executor_fail = CrossExecutor(kalshi=kalshi_fail, poly=poly_fail, journal=journal)  # type: ignore[arg-type]
     config = Config()
 
     result1 = await executor_fail.execute(_profitable_match(), config)
@@ -204,7 +206,7 @@ async def test_retry_after_failure_allowed(journal: ExecutionJournal):
     # Retry with working clients — should proceed because previous was failed
     kalshi_ok = FakeKalshiClient()
     poly_ok = FakePolyClient()
-    executor_ok = CrossExecutor(kalshi=kalshi_ok, poly=poly_ok, journal=journal)
+    executor_ok = CrossExecutor(kalshi=kalshi_ok, poly=poly_ok, journal=journal)  # type: ignore[arg-type]
 
     result2 = await executor_ok.execute(_profitable_match(), config)
     assert result2.success is True
@@ -216,7 +218,7 @@ async def test_no_journal_no_idempotency():
     """Without a journal, idempotency is not enforced (no crash)."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=None)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=None)  # type: ignore[arg-type]
     config = Config()
 
     result1 = await executor.execute(_profitable_match(), config)
@@ -235,7 +237,7 @@ async def test_unique_constraint_prevents_race(journal: ExecutionJournal):
     poly = FakePolyClient()
 
     # First execution succeeds normally
-    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
     result1 = await executor.execute(_profitable_match(), Config())
     assert result1.success is True
 
@@ -246,7 +248,7 @@ async def test_unique_constraint_prevents_race(journal: ExecutionJournal):
     # Patch find_by_idempotency_key to return None (simulates the race:
     # the other coroutine hasn't inserted yet when we check)
     real_find = journal.find_by_idempotency_key
-    journal.find_by_idempotency_key = lambda key: None  # type: ignore[assignment]
+    journal.find_by_idempotency_key = lambda key: None  # type: ignore[method-assign]
 
     # Second execution: soft check sees nothing, but insert hits unique constraint.
     # IntegrityError handler falls back to lookup (using the real method).
@@ -255,10 +257,10 @@ async def test_unique_constraint_prevents_race(journal: ExecutionJournal):
 
     def patched_record(*args, **kwargs):
         # Restore find so the IntegrityError handler's fallback lookup works
-        journal.find_by_idempotency_key = real_find  # type: ignore[assignment]
+        journal.find_by_idempotency_key = real_find  # type: ignore[method-assign]
         return original_record(*args, **kwargs)
 
-    journal.record_execution = patched_record  # type: ignore[assignment]
+    journal.record_execution = patched_record  # type: ignore[method-assign]
 
     result2 = await executor.execute(_profitable_match(), Config())
     assert "Duplicate execution skipped" in result2.error

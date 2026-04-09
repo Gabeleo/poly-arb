@@ -93,11 +93,7 @@ _SPEC = {
             "post": {
                 "summary": "Update config",
                 "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": ConfigUpdate.model_json_schema()
-                        }
-                    }
+                    "content": {"application/json": {"schema": ConfigUpdate.model_json_schema()}}
                 },
                 "responses": {
                     "200": {"description": "Updated config"},

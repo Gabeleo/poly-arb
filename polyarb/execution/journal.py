@@ -28,7 +28,10 @@ class ExecutionJournal:
         self._conn.row_factory = sqlite3.Row
 
     def record_execution(
-        self, execution_id: str, match_key: str, leg_count: int,
+        self,
+        execution_id: str,
+        match_key: str,
+        leg_count: int,
         idempotency_key: str | None = None,
     ) -> None:
         self._repo.record_execution(execution_id, match_key, leg_count, idempotency_key)
@@ -37,7 +40,10 @@ class ExecutionJournal:
         return self._repo.find_by_idempotency_key(key)
 
     def record_completion(
-        self, execution_id: str, success: bool, profit: float | None = None,
+        self,
+        execution_id: str,
+        success: bool,
+        profit: float | None = None,
     ) -> None:
         self._repo.record_completion(execution_id, success, profit)
 
@@ -53,7 +59,14 @@ class ExecutionJournal:
         size: float,
     ) -> int:
         return self._repo.record_attempt(
-            execution_id, leg_index, platform, ticker, side, action, price, size,
+            execution_id,
+            leg_index,
+            platform,
+            ticker,
+            side,
+            action,
+            price,
+            size,
         )
 
     def mark_sent(self, row_id: int) -> None:

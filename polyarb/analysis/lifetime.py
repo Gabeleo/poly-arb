@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from polyarb.analysis.costs import ArbResult, FeeParams, compute_arb, is_profitable
@@ -134,7 +134,7 @@ def analyze_pair(
     db_path: str | Path,
     poly_cid: str,
     kalshi_ticker: str,
-    fees: FeeParams = FeeParams(),
+    fees: FeeParams | None = None,
     scan_interval: int = 30,
     repo=None,
 ) -> PairLifetime:
@@ -143,6 +143,8 @@ def analyze_pair(
     If *repo* is provided (a SnapshotRepository), uses it directly.
     Otherwise, creates one from *db_path*.
     """
+    if fees is None:
+        fees = FeeParams()
     if repo is None:
         from polyarb.db.engine import create_engine
         from polyarb.db.repositories.snapshots import SqliteSnapshotRepository
@@ -170,9 +172,14 @@ def analyze_pair(
 
     for r in rows:
         arb = compute_arb(
-            r["poly_yes_ask"], r["poly_no_ask"],
-            r["kalshi_yes_ask"], r["kalshi_no_ask"], fees,
+            r["poly_yes_ask"],
+            r["poly_no_ask"],
+            r["kalshi_yes_ask"],
+            r["kalshi_no_ask"],
+            fees,
         )
+        if arb is None:
+            continue
         scans.append((r["scan_ts"], arb))
         if is_profitable(arb):
             profitable_count += 1
@@ -193,11 +200,13 @@ def analyze_pair(
 def analyze_pairs(
     db_path: str | Path,
     pairs: list[tuple[str, str]],
-    fees: FeeParams = FeeParams(),
+    fees: FeeParams | None = None,
     scan_interval: int = 30,
     repo=None,
 ) -> list[PairLifetime]:
     """Run lifetime analysis for multiple matched pairs."""
+    if fees is None:
+        fees = FeeParams()
     return [
         analyze_pair(db_path, poly_cid, kalshi_ticker, fees, scan_interval, repo=repo)
         for poly_cid, kalshi_ticker in pairs
@@ -256,8 +265,10 @@ def format_report(lifetimes: list[PairLifetime]) -> str:
     lines.append(f"Pairs analyzed:    {stats['pairs_analyzed']}")
     lines.append(f"Pairs with arbs:   {stats['pairs_with_arbs']}")
     lines.append(f"Total arb windows: {stats['total_windows']}")
-    lines.append(f"Profitable scans:  {stats['total_profitable_scans']} / {stats['total_scans']}"
-                 f" ({stats['total_profitable_scans']/max(stats['total_scans'],1)*100:.1f}%)")
+    lines.append(
+        f"Profitable scans:  {stats['total_profitable_scans']} / {stats['total_scans']}"
+        f" ({stats['total_profitable_scans'] / max(stats['total_scans'], 1) * 100:.1f}%)"
+    )
     lines.append("")
 
     if stats["total_windows"] > 0:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from polyarb.daemon.state import State
 from polyarb.data.base import group_events
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _scan_timestamp() -> str:
     """UTC timestamp for the current scan cycle."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # Timeouts and circuit breaker defaults
@@ -48,7 +48,9 @@ class _CircuitBreaker:
         self._failures += 1
         logger.warning(
             "Provider %s failed (%d consecutive): %s",
-            self.name, self._failures, exc,
+            self.name,
+            self._failures,
+            exc,
         )
         metrics.fetch_errors.labels(provider=self.name).inc()
         if self.is_open:
@@ -62,8 +64,9 @@ class _CircuitBreaker:
     def backoff_delay(self) -> float:
         if not self.is_open:
             return 0.0
-        delay = min(10.0 * (2 ** (self._failures - CIRCUIT_BREAKER_THRESHOLD)),
-                    CIRCUIT_BREAKER_MAX_DELAY)
+        delay = min(
+            10.0 * (2 ** (self._failures - CIRCUIT_BREAKER_THRESHOLD)), CIRCUIT_BREAKER_MAX_DELAY
+        )
         return delay
 
 
@@ -76,16 +79,14 @@ async def _verify_candidates(
     if not candidates:
         return []
 
-    pairs = [
-        (c.poly_market.question, c.kalshi_market.question) for c in candidates
-    ]
+    pairs = [(c.poly_market.question, c.kalshi_market.question) for c in candidates]
     with metrics.encoder_duration.time():
         scores = await encoder_client.score_pairs(pairs)
 
     if scores is not None:
         # Keep best Kalshi match per Poly market (1:1 mapping)
         best: dict[str, MatchedPair] = {}
-        for c, score in zip(candidates, scores):
+        for c, score in zip(candidates, scores, strict=True):
             if score < final_threshold:
                 continue
             key = c.poly_market.condition_id
@@ -122,11 +123,12 @@ async def _fetch_markets(
         try:
             with metrics.fetch_duration.labels(provider="poly").time():
                 poly_markets = await asyncio.wait_for(
-                    poly.get_active_markets(), timeout=FETCH_TIMEOUT,
+                    poly.get_active_markets(),
+                    timeout=FETCH_TIMEOUT,
                 )
             metrics.markets_fetched.labels(provider="poly").set(len(poly_markets))
             poly_cb.record_success()
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             poly_cb.record_failure(exc)
 
     async def _fetch_kalshi():
@@ -137,11 +139,12 @@ async def _fetch_markets(
         try:
             with metrics.fetch_duration.labels(provider="kalshi").time():
                 kalshi_markets = await asyncio.wait_for(
-                    kalshi.get_active_markets(), timeout=FETCH_TIMEOUT,
+                    kalshi.get_active_markets(),
+                    timeout=FETCH_TIMEOUT,
                 )
             metrics.markets_fetched.labels(provider="kalshi").set(len(kalshi_markets))
             kalshi_cb.record_success()
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             kalshi_cb.record_failure(exc)
 
     await asyncio.gather(_fetch_poly(), _fetch_kalshi())
@@ -162,11 +165,15 @@ async def _match_markets(
 
     if encoder_client is not None:
         candidates = await asyncio.to_thread(
-            generate_all_pairs, poly_markets, kalshi_markets,
+            generate_all_pairs,
+            poly_markets,
+            kalshi_markets,
         )
         logger.info(
             "Generated %d candidate pairs (%d poly x %d kalshi)",
-            len(candidates), len(poly_markets), len(kalshi_markets),
+            len(candidates),
+            len(poly_markets),
+            len(kalshi_markets),
         )
 
         # Bi-encoder pre-filtering
@@ -182,7 +189,10 @@ async def _match_markets(
 
     # No encoder: use token-based matching only
     return await asyncio.to_thread(
-        find_matches, poly_markets, kalshi_markets, final_threshold,
+        find_matches,
+        poly_markets,
+        kalshi_markets,
+        final_threshold,
     )
 
 
@@ -211,16 +221,20 @@ async def _publish_results(
     metrics.opportunities_found.set(len(all_opps))
 
     if new_matches:
-        await state.broadcast({
-            "type": "new_matches",
-            "data": [m.to_dict() for m in new_matches],
-        })
+        await state.broadcast(
+            {
+                "type": "new_matches",
+                "data": [m.to_dict() for m in new_matches],
+            }
+        )
 
     if new_opps:
-        await state.broadcast({
-            "type": "new_opportunities",
-            "data": [o.to_dict() for o in new_opps],
-        })
+        await state.broadcast(
+            {
+                "type": "new_opportunities",
+                "data": [o.to_dict() for o in new_opps],
+            }
+        )
 
     if approval_manager:
         await approval_manager.expire_stale()
@@ -231,24 +245,29 @@ async def _publish_results(
     if match_repo is not None and matches:
         match_dicts = []
         for m in matches:
-            match_dicts.append({
-                "poly_condition_id": m.poly_market.condition_id,
-                "kalshi_ticker": m.kalshi_market.condition_id,
-                "poly_question": m.poly_market.question,
-                "kalshi_question": m.kalshi_market.question,
-                "confidence": m.confidence,
-                "poly_yes_bid": m.poly_market.yes_token.best_bid,
-                "poly_yes_ask": m.poly_market.yes_token.best_ask,
-                "poly_no_bid": m.poly_market.no_token.best_bid,
-                "poly_no_ask": m.poly_market.no_token.best_ask,
-                "kalshi_yes_bid": m.kalshi_market.yes_token.best_bid,
-                "kalshi_yes_ask": m.kalshi_market.yes_token.best_ask,
-                "kalshi_no_bid": m.kalshi_market.no_token.best_bid,
-                "kalshi_no_ask": m.kalshi_market.no_token.best_ask,
-            })
+            match_dicts.append(
+                {
+                    "poly_condition_id": m.poly_market.condition_id,
+                    "kalshi_ticker": m.kalshi_market.condition_id,
+                    "poly_question": m.poly_market.question,
+                    "kalshi_question": m.kalshi_market.question,
+                    "confidence": m.confidence,
+                    "poly_yes_bid": m.poly_market.yes_token.best_bid,
+                    "poly_yes_ask": m.poly_market.yes_token.best_ask,
+                    "poly_no_bid": m.poly_market.no_token.best_bid,
+                    "poly_no_ask": m.poly_market.no_token.best_ask,
+                    "kalshi_yes_bid": m.kalshi_market.yes_token.best_bid,
+                    "kalshi_yes_ask": m.kalshi_market.yes_token.best_ask,
+                    "kalshi_no_bid": m.kalshi_market.no_token.best_bid,
+                    "kalshi_no_ask": m.kalshi_market.no_token.best_ask,
+                }
+            )
         try:
             await asyncio.to_thread(
-                match_repo.insert_matches, scan_ts or "", scan_id or "", match_dicts,
+                match_repo.insert_matches,
+                scan_ts or "",
+                scan_id or "",
+                match_dicts,
             )
         except Exception:
             logger.exception("Failed to record match snapshots")
@@ -258,7 +277,10 @@ async def _publish_results(
 
 
 async def run_scan_once(
-    state: State, poly, kalshi, approval_manager=None,
+    state: State,
+    poly,
+    kalshi,
+    approval_manager=None,
     encoder_client: EncoderClient | None = None,
     poly_cb: _CircuitBreaker | None = None,
     kalshi_cb: _CircuitBreaker | None = None,
@@ -279,7 +301,10 @@ async def run_scan_once(
 
             cfg = state.config
             matches = await _match_markets(
-                poly_markets, kalshi_markets, encoder_client, cfg.match_final_threshold,
+                poly_markets,
+                kalshi_markets,
+                encoder_client,
+                cfg.match_final_threshold,
                 biencoder=biencoder,
                 candidate_threshold=cfg.match_candidate_threshold,
             )
@@ -287,8 +312,13 @@ async def run_scan_once(
             all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
 
             await _publish_results(
-                state, matches, all_opps, approval_manager,
-                match_repo=match_repo, scan_ts=scan_ts, scan_id=sid,
+                state,
+                matches,
+                all_opps,
+                approval_manager,
+                match_repo=match_repo,
+                scan_ts=scan_ts,
+                scan_id=sid,
             )
             metrics.scan_total.labels(status="success").inc()
         except Exception:
@@ -297,7 +327,11 @@ async def run_scan_once(
 
 
 async def run_scan_loop(
-    state: State, poly, kalshi, approval_manager=None, telegram_bot=None,
+    state: State,
+    poly,
+    kalshi,
+    approval_manager=None,
+    telegram_bot=None,
     encoder_client: EncoderClient | None = None,
     stop_event: asyncio.Event | None = None,
     biencoder=None,
@@ -319,8 +353,14 @@ async def run_scan_loop(
 
         try:
             await run_scan_once(
-                state, poly, kalshi, approval_manager, encoder_client,
-                poly_cb, kalshi_cb, biencoder=biencoder,
+                state,
+                poly,
+                kalshi,
+                approval_manager,
+                encoder_client,
+                poly_cb,
+                kalshi_cb,
+                biencoder=biencoder,
                 match_repo=match_repo,
             )
 
@@ -353,7 +393,7 @@ async def run_scan_loop(
                 await asyncio.wait_for(stop_event.wait(), timeout=delay)
                 logger.info("Shutdown requested during sleep, exiting scan loop")
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # Normal timeout — continue loop
         else:
             await asyncio.sleep(delay)

@@ -6,7 +6,6 @@ import httpx
 
 from polyarb.client.api import DaemonClient
 
-
 # ── Mock transport ──────────────────────────────────────────
 
 

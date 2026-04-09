@@ -1,11 +1,10 @@
 """Tests for lifetime analysis using mock snapshot database."""
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from polyarb.analysis.costs import FeeParams
+from polyarb.analysis.costs import ArbResult
 from polyarb.analysis.lifetime import (
     ArbWindow,
     PairLifetime,
@@ -16,8 +15,6 @@ from polyarb.analysis.lifetime import (
     format_report,
     summary,
 )
-from polyarb.analysis.costs import ArbResult
-
 
 # ── Unit tests ────────────────────────────────────────────────
 
@@ -31,8 +28,11 @@ def test_seconds_between():
 def _arb(profit: float, direction: str = "poly_yes_kalshi_no") -> ArbResult:
     return ArbResult(
         direction=direction,
-        poly_ask=0.40, kalshi_ask=0.50,
-        gross_cost=0.90, poly_fee=0.01, kalshi_fee=0.02,
+        poly_ask=0.40,
+        kalshi_ask=0.50,
+        gross_cost=0.90,
+        poly_fee=0.01,
+        kalshi_fee=0.02,
         net_profit=profit,
     )
 
@@ -90,9 +90,12 @@ def test_find_windows_single_scan():
 
 def test_pair_lifetime_properties():
     lt = PairLifetime(
-        poly_cid="0x1", kalshi_ticker="KX1",
-        poly_question="Q1?", kalshi_question="Q2?",
-        total_scans=100, profitable_scans=10,
+        poly_cid="0x1",
+        kalshi_ticker="KX1",
+        poly_question="Q1?",
+        kalshi_question="Q2?",
+        total_scans=100,
+        profitable_scans=10,
         windows=[
             ArbWindow("t1", "t2", 300, 10, 0.05, 0.03, "poly_yes_kalshi_no"),
             ArbWindow("t3", "t4", 600, 20, 0.07, 0.04, "poly_yes_kalshi_no"),
@@ -107,9 +110,12 @@ def test_pair_lifetime_properties():
 
 def test_summary_no_arbs():
     lt = PairLifetime(
-        poly_cid="0x1", kalshi_ticker="KX1",
-        poly_question="Q?", kalshi_question="Q?",
-        total_scans=100, profitable_scans=0,
+        poly_cid="0x1",
+        kalshi_ticker="KX1",
+        poly_question="Q?",
+        kalshi_question="Q?",
+        total_scans=100,
+        profitable_scans=0,
     )
     stats = summary([lt])
     assert stats["pairs_with_arbs"] == 0

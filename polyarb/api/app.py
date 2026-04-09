@@ -53,9 +53,9 @@ def create_app(
     ]
 
     middleware = [
-        Middleware(RequestIdMiddleware),   # outermost — sets request_id first
-        Middleware(MetricsMiddleware),     # times everything below
-        Middleware(RateLimitMiddleware),   # rate check before auth
+        Middleware(RequestIdMiddleware),  # outermost — sets request_id first
+        Middleware(MetricsMiddleware),  # times everything below
+        Middleware(RateLimitMiddleware),  # rate check before auth
     ]
     if api_key:
         middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))

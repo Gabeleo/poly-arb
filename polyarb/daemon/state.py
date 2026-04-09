@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from polyarb.config import Config
 from polyarb.matching.matcher import MatchedPair
@@ -21,7 +21,7 @@ class State:
     opportunities: list[Opportunity] = field(default_factory=list)
     ws_clients: set = field(default_factory=set)
     scan_count: int = 0
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_scan_at: datetime | None = None
     last_scan_error: str | None = None
     biencoder_enabled: bool = False
@@ -37,7 +37,7 @@ class State:
         """Replace match list, increment scan_count, return only NEW matches."""
         self.matches = matches
         self.scan_count += 1
-        self.last_scan_at = datetime.now(timezone.utc)
+        self.last_scan_at = datetime.now(UTC)
 
         self._seen_matches = self._prune(self._seen_matches)
 
@@ -79,7 +79,7 @@ class State:
 
     def status_dict(self) -> dict:
         """Return current status as a JSON-serializable dict."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         uptime = (now - self.started_at).total_seconds()
         return {
             "uptime_seconds": round(uptime, 1),

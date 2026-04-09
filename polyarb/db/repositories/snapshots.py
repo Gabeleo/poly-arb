@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from sqlalchemy import insert, select, func, text
+from sqlalchemy import func, insert, select
 from sqlalchemy.engine import Engine
 
 from polyarb.db.models import kalshi_snapshots, polymarket_snapshots
@@ -48,14 +48,10 @@ class SqliteSnapshotRepository:
         if not rows:
             return 0
         with self._engine.begin() as conn:
-            before = conn.execute(
-                select(func.count()).select_from(kalshi_snapshots)
-            ).scalar_one()
+            before = conn.execute(select(func.count()).select_from(kalshi_snapshots)).scalar_one()
             stmt = insert(kalshi_snapshots).prefix_with("OR IGNORE")
             conn.execute(stmt, rows)
-            after = conn.execute(
-                select(func.count()).select_from(kalshi_snapshots)
-            ).scalar_one()
+            after = conn.execute(select(func.count()).select_from(kalshi_snapshots)).scalar_one()
         return after - before
 
     def scan_count(self) -> dict[str, int]:
@@ -70,12 +66,8 @@ class SqliteSnapshotRepository:
 
     def market_count(self) -> dict[str, int]:
         with self._engine.connect() as conn:
-            poly = conn.execute(
-                select(func.count()).select_from(polymarket_snapshots)
-            ).scalar_one()
-            kalshi = conn.execute(
-                select(func.count()).select_from(kalshi_snapshots)
-            ).scalar_one()
+            poly = conn.execute(select(func.count()).select_from(polymarket_snapshots)).scalar_one()
+            kalshi = conn.execute(select(func.count()).select_from(kalshi_snapshots)).scalar_one()
         return {"polymarket": poly, "kalshi": kalshi}
 
     def get_pair_scans(self, poly_cid: str, kalshi_ticker: str) -> list[dict]:
@@ -103,15 +95,17 @@ class SqliteSnapshotRepository:
 
     def get_distinct_scan_timestamps(self) -> list[str]:
         """Return all distinct scan timestamps, ordered."""
-        stmt = (
-            select(polymarket_snapshots.c.scan_ts.distinct())
-            .order_by(polymarket_snapshots.c.scan_ts)
+        stmt = select(polymarket_snapshots.c.scan_ts.distinct()).order_by(
+            polymarket_snapshots.c.scan_ts
         )
         with self._engine.connect() as conn:
             return [r[0] for r in conn.execute(stmt).fetchall()]
 
     def get_pair_scan_at(
-        self, poly_cid: str, kalshi_ticker: str, scan_ts: str,
+        self,
+        poly_cid: str,
+        kalshi_ticker: str,
+        scan_ts: str,
     ) -> dict | None:
         """Return a single scan row for a pair at a specific timestamp."""
         p = polymarket_snapshots

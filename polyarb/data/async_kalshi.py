@@ -37,7 +37,7 @@ def _parse_dt(s: str | None) -> datetime | None:
         return None
 
 
-def _parse_market(
+def _parse_market(  # noqa: C901
     raw: dict, event_title: str = "", neg_risk: bool = False
 ) -> Market | None:
     """Parse a Kalshi market JSON object into our Market model.
