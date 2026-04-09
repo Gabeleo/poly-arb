@@ -47,7 +47,7 @@ def test_kalshi_column_count():
 
 
 def test_executions_column_count():
-    assert len(executions.columns) == 8
+    assert len(executions.columns) == 9
 
 
 def test_execution_legs_column_count():

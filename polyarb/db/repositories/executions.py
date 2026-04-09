@@ -18,7 +18,8 @@ def _now() -> str:
 class ExecutionRepository(Protocol):
     """Read/write execution journal."""
 
-    def record_execution(self, execution_id: str, match_key: str, leg_count: int) -> None: ...
+    def record_execution(self, execution_id: str, match_key: str, leg_count: int,
+                         idempotency_key: str | None = None) -> None: ...
     def record_attempt(self, execution_id: str, leg_index: int, platform: str,
                        ticker: str, side: str, action: str, price: float, size: float) -> int: ...
     def mark_sent(self, row_id: int) -> None: ...
@@ -26,6 +27,7 @@ class ExecutionRepository(Protocol):
                       fill_qty: float | None = None, error: str | None = None) -> None: ...
     def record_cancel(self, row_id: int, cancel_status: str) -> None: ...
     def record_completion(self, execution_id: str, success: bool, profit: float | None = None) -> None: ...
+    def find_by_idempotency_key(self, key: str) -> dict | None: ...
     def get_orphans(self) -> list[dict]: ...
     def mark_orphaned(self, row_id: int) -> None: ...
     def count_by_status(self, status: str) -> int: ...
@@ -38,7 +40,10 @@ class SqliteExecutionRepository:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
-    def record_execution(self, execution_id: str, match_key: str, leg_count: int) -> None:
+    def record_execution(
+        self, execution_id: str, match_key: str, leg_count: int,
+        idempotency_key: str | None = None,
+    ) -> None:
         with self._engine.begin() as conn:
             conn.execute(
                 insert(executions).values(
@@ -46,8 +51,21 @@ class SqliteExecutionRepository:
                     created_at=_now(),
                     match_key=match_key,
                     leg_count=leg_count,
+                    idempotency_key=idempotency_key,
                 )
             )
+
+    def find_by_idempotency_key(self, key: str) -> dict | None:
+        """Return the most recent non-failed execution with this key, or None."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(executions)
+                .where(executions.c.idempotency_key == key)
+                .where(executions.c.status != "failed")
+                .order_by(executions.c.id.desc())
+                .limit(1)
+            ).mappings().first()
+        return dict(row) if row else None
 
     def record_attempt(
         self, execution_id: str, leg_index: int, platform: str,

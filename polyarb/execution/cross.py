@@ -7,8 +7,11 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 
+from sqlalchemy.exc import IntegrityError
+
 from polyarb.analysis.costs import compute_arb
 from polyarb.config import Config
+from polyarb.execution.idempotency import generate_idempotency_key
 from polyarb.matching.matcher import MatchedPair
 from polyarb.sizing import kelly_size
 
@@ -80,13 +83,45 @@ class CrossExecutor:
 
         match_key = f"{match.poly_market.condition_id}:{match.kalshi_market.condition_id}"
 
+        # Idempotency: generate key and check for duplicate
+        direction = f"kalshi_{k['side']}_poly_{p['side']}"
+        idem_key = generate_idempotency_key(match_key, direction, float(size))
+
+        if self.journal is not None:
+            existing = self.journal.find_by_idempotency_key(idem_key)
+            if existing is not None:
+                logger.info(
+                    "Idempotency hit: execution %s already exists for key %s (status=%s)",
+                    existing["execution_id"], idem_key, existing["status"],
+                )
+                return ExecutionResult(
+                    success=existing["status"] == "completed",
+                    error=f"Duplicate execution skipped (existing={existing['execution_id']})",
+                )
+
         # Journal: record execution and legs
         execution_id = ""
         k_row_id = None
         p_row_id = None
         if self.journal is not None:
             execution_id = uuid.uuid4().hex[:12]
-            self.journal.record_execution(execution_id, match_key, 2)
+            try:
+                self.journal.record_execution(execution_id, match_key, 2, idempotency_key=idem_key)
+            except IntegrityError:
+                # Lost the race — another coroutine inserted first
+                existing = self.journal.find_by_idempotency_key(idem_key)
+                if existing is not None:
+                    logger.info(
+                        "Idempotency race: execution %s won for key %s",
+                        existing["execution_id"], idem_key,
+                    )
+                    return ExecutionResult(
+                        success=existing["status"] == "completed",
+                        error=f"Duplicate execution skipped (existing={existing['execution_id']})",
+                    )
+                # Winner already failed — we can proceed with a fresh key
+                execution_id = uuid.uuid4().hex[:12]
+                self.journal.record_execution(execution_id, match_key, 2)
             k_row_id = self.journal.record_attempt(
                 execution_id, 0, "kalshi", k["ticker"], k["side"], "buy",
                 k["price"], float(size),
