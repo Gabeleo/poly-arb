@@ -13,6 +13,7 @@ from polyarb.api.middleware.auth import ApiKeyMiddleware
 from polyarb.api.middleware.rate_limit import RateLimitMiddleware
 from polyarb.api.openapi import openapi_spec
 from polyarb.api.routes import (
+    analytics,
     config,
     execution,
     health,
@@ -38,6 +39,8 @@ def create_app(
     poly_provider: Any = None,
     kalshi_provider: Any = None,
     audit_repo: Any = None,
+    pnl_provider: Any = None,
+    performance_provider: Any = None,
 ) -> Starlette:
     """Build and return a Starlette application wired to *state*."""
 
@@ -47,6 +50,7 @@ def create_app(
         *opportunities.routes,
         *config.routes,
         *execution.routes,
+        *analytics.routes,
         *webhooks.routes,
         *ws.routes,
         Route("/openapi.json", openapi_spec, methods=["GET"]),
@@ -72,5 +76,7 @@ def create_app(
     app.state.poly_provider = poly_provider
     app.state.kalshi_provider = kalshi_provider
     app.state.audit_repo = audit_repo
+    app.state.pnl_provider = pnl_provider
+    app.state.performance_provider = performance_provider
 
     return app
