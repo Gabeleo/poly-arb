@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from datetime import UTC, datetime
 
@@ -26,7 +27,7 @@ def _scan_timestamp() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-FETCH_TIMEOUT = 30.0  # seconds per provider fetch
+_FETCH_RETRY_BASE = 1.0  # base delay in seconds for retry backoff
 
 
 def _metrics_state_change(name: str, is_open: bool) -> None:
@@ -84,49 +85,61 @@ async def _verify_candidates(
 # ── Scan sub-steps ────────────────────────────────────────────────
 
 
+async def _fetch_with_retry(
+    provider,
+    label: str,
+    cb: CircuitBreaker,
+    timeout: float = 30.0,
+    retries: int = 2,
+) -> list[Market]:
+    """Fetch markets from a single provider with retry+jitter before surfacing to CB."""
+    if cb.is_open:
+        logger.info("%s provider circuit open, backing off %.0fs", label, cb.backoff_delay)
+        return []
+
+    last_exc: BaseException | None = None
+    for attempt in range(1 + retries):
+        try:
+            with metrics.fetch_duration.labels(provider=label).time():
+                result = await asyncio.wait_for(
+                    provider.get_active_markets(),
+                    timeout=timeout,
+                )
+            metrics.markets_fetched.labels(provider=label).set(len(result))
+            cb.record_success()
+            return result
+        except (TimeoutError, Exception) as exc:
+            last_exc = exc
+            if attempt < retries:
+                delay = _FETCH_RETRY_BASE * (2**attempt) + random.uniform(0, 0.5)
+                logger.warning(
+                    "%s fetch attempt %d/%d failed, retrying in %.1fs: %s",
+                    label,
+                    attempt + 1,
+                    1 + retries,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+
+    # All retries exhausted — surface to circuit breaker
+    cb.record_failure(last_exc)
+    return []
+
+
 async def _fetch_markets(
     poly,
     kalshi,
     poly_cb: CircuitBreaker,
     kalshi_cb: CircuitBreaker,
+    timeout: float = 30.0,
+    retries: int = 2,
 ) -> tuple[list[Market], list[Market]]:
-    """Fetch markets from both providers with per-provider timeout and circuit breaker."""
-    poly_markets: list[Market] = []
-    kalshi_markets: list[Market] = []
-
-    async def _fetch_poly():
-        nonlocal poly_markets
-        if poly_cb.is_open:
-            logger.info("Poly provider circuit open, backing off %.0fs", poly_cb.backoff_delay)
-            return
-        try:
-            with metrics.fetch_duration.labels(provider="poly").time():
-                poly_markets = await asyncio.wait_for(
-                    poly.get_active_markets(),
-                    timeout=FETCH_TIMEOUT,
-                )
-            metrics.markets_fetched.labels(provider="poly").set(len(poly_markets))
-            poly_cb.record_success()
-        except (TimeoutError, Exception) as exc:
-            poly_cb.record_failure(exc)
-
-    async def _fetch_kalshi():
-        nonlocal kalshi_markets
-        if kalshi_cb.is_open:
-            logger.info("Kalshi provider circuit open, backing off %.0fs", kalshi_cb.backoff_delay)
-            return
-        try:
-            with metrics.fetch_duration.labels(provider="kalshi").time():
-                kalshi_markets = await asyncio.wait_for(
-                    kalshi.get_active_markets(),
-                    timeout=FETCH_TIMEOUT,
-                )
-            metrics.markets_fetched.labels(provider="kalshi").set(len(kalshi_markets))
-            kalshi_cb.record_success()
-        except (TimeoutError, Exception) as exc:
-            kalshi_cb.record_failure(exc)
-
-    await asyncio.gather(_fetch_poly(), _fetch_kalshi())
+    """Fetch markets from both providers concurrently with retry and circuit breaker."""
+    poly_markets, kalshi_markets = await asyncio.gather(
+        _fetch_with_retry(poly, "poly", poly_cb, timeout=timeout, retries=retries),
+        _fetch_with_retry(kalshi, "kalshi", kalshi_cb, timeout=timeout, retries=retries),
+    )
     return poly_markets, kalshi_markets
 
 
@@ -295,21 +308,30 @@ async def run_scan_once(
     scan_ts = _scan_timestamp()
     logger.info("Starting scan %s", sid)
 
+    cfg = state.config
     with metrics.scan_duration.time():
         try:
-            poly_markets, kalshi_markets = await _fetch_markets(poly, kalshi, poly_cb, kalshi_cb)
+            with metrics.fetch_step_duration.time():
+                poly_markets, kalshi_markets = await _fetch_markets(
+                    poly,
+                    kalshi,
+                    poly_cb,
+                    kalshi_cb,
+                    timeout=cfg.fetch_timeout,
+                    retries=cfg.fetch_retries,
+                )
+            with metrics.match_step_duration.time():
+                matches = await _match_markets(
+                    poly_markets,
+                    kalshi_markets,
+                    encoder_client,
+                    cfg.match_final_threshold,
+                    biencoder=biencoder,
+                    candidate_threshold=cfg.match_candidate_threshold,
+                )
 
-            cfg = state.config
-            matches = await _match_markets(
-                poly_markets,
-                kalshi_markets,
-                encoder_client,
-                cfg.match_final_threshold,
-                biencoder=biencoder,
-                candidate_threshold=cfg.match_candidate_threshold,
-            )
-
-            all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
+            with metrics.detect_step_duration.time():
+                all_opps = await _detect_opportunities(poly_markets + kalshi_markets, cfg)
 
             await _publish_results(
                 state,

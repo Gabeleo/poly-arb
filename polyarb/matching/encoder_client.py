@@ -6,6 +6,8 @@ import logging
 
 import httpx
 
+from polyarb.observability import metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +56,8 @@ class EncoderClient:
             resp = await self._client.get(f"{self._base_url}/health")
             return resp.status_code == 200
         except Exception:
+            logger.warning("Encoder health check failed", exc_info=True)
+            metrics.encoder_errors.inc()
             return False
 
     async def close(self) -> None:

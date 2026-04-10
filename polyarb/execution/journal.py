@@ -24,10 +24,15 @@ class ExecutionJournal:
         self._engine = create_engine(url)
         metadata.create_all(self._engine)
         self._repo = SqliteExecutionRepository(self._engine)
+        self._raw_conn: sqlite3.Connection | None = None  # lazy, for test introspection only
 
-        # Backward-compat: tests verify rows via _conn
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        """Raw SQLite connection for test introspection. Uses the engine's pool."""
+        if self._raw_conn is None:
+            self._raw_conn = sqlite3.connect(self._db_path)
+            self._raw_conn.row_factory = sqlite3.Row
+        return self._raw_conn
 
     def record_execution(
         self,
@@ -104,5 +109,6 @@ class ExecutionJournal:
         self._repo.mark_orphaned(row_id)
 
     def close(self) -> None:
-        self._conn.close()
+        if self._raw_conn is not None:
+            self._raw_conn.close()
         self._engine.dispose()

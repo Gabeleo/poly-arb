@@ -88,6 +88,26 @@ position_value_dollars = Gauge(
     ["platform"],
 )
 
+# Webhook
+webhook_errors = Counter(
+    "polyarb_webhook_errors_total",
+    "Webhook handler failures",
+)
+
+# Scan sub-steps
+fetch_step_duration = Histogram(
+    "polyarb_fetch_step_duration_seconds",
+    "Time spent in the fetch sub-step of a scan cycle",
+)
+match_step_duration = Histogram(
+    "polyarb_match_step_duration_seconds",
+    "Time spent in the match sub-step of a scan cycle",
+)
+detect_step_duration = Histogram(
+    "polyarb_detect_step_duration_seconds",
+    "Time spent in the detect sub-step of a scan cycle",
+)
+
 # Database
 db_size_bytes = Gauge(
     "polyarb_db_size_bytes",

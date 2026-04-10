@@ -12,7 +12,7 @@ import uvicorn
 
 from polyarb.api.app import create_app
 from polyarb.config import Config, Settings
-from polyarb.daemon.engine import FETCH_TIMEOUT, run_scan_loop
+from polyarb.daemon.engine import run_scan_loop
 from polyarb.daemon.state import State
 from polyarb.data.async_kalshi import AsyncKalshiDataProvider
 from polyarb.data.async_live import AsyncLiveDataProvider
@@ -156,7 +156,7 @@ def main() -> None:  # noqa: C901
         logger.info("Shutting down — waiting for current scan to finish...")
         stop_event.set()
         try:
-            await asyncio.wait_for(scan_task, timeout=FETCH_TIMEOUT + 10)
+            await asyncio.wait_for(scan_task, timeout=config.fetch_timeout + 10)
         except TimeoutError:
             logger.warning("Scan did not finish in time, cancelling")
             scan_task.cancel()

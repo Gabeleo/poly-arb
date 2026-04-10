@@ -6,8 +6,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  DAEMON_IMAGE: ghcr.io/${{ github.repository }}/daemon
-  ENCODER_IMAGE: ghcr.io/${{ github.repository }}/encoder
 
 jobs:
   build-daemon:
@@ -18,6 +16,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set image name
+        run: echo "DAEMON_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/daemon" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -43,6 +44,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set image name
+        run: echo "ENCODER_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/encoder" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3

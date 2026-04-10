@@ -7,7 +7,7 @@ class Config:
     max_prob: float = 0.95
     scan_interval: float = 10.0
     order_size: float = 10.0
-    kelly_fraction: float = 0.5
+    kelly_fraction: float = 0.0
     max_position: float = 100.0
     bankroll: float = 0.0
     dedup_window: int = 60
@@ -15,6 +15,10 @@ class Config:
     digest_interval: float = 3600.0
     match_candidate_threshold: float = 0.15
     match_final_threshold: float = 0.5
+    fetch_timeout: float = 30.0
+    fetch_retries: int = 2
+    provider_timeout: float = 15.0
+    encoder_timeout: float = 60.0
 
     def __post_init__(self) -> None:  # noqa: C901
         if self.min_profit < 0:
@@ -41,3 +45,21 @@ class Config:
             raise ValueError("match_candidate_threshold must be > 0")
         if self.match_final_threshold <= 0:
             raise ValueError("match_final_threshold must be > 0")
+        if self.fetch_timeout <= 0:
+            raise ValueError("fetch_timeout must be > 0")
+        if self.fetch_retries < 0:
+            raise ValueError("fetch_retries must be >= 0")
+        if self.provider_timeout <= 0:
+            raise ValueError("provider_timeout must be > 0")
+        if self.encoder_timeout <= 0:
+            raise ValueError("encoder_timeout must be > 0")
+        # Cross-field validations
+        if self.kelly_fraction > 0 and self.bankroll == 0:
+            raise ValueError(
+                "kelly_fraction > 0 requires bankroll > 0 (set bankroll or disable Kelly with kelly_fraction=0)"
+            )
+        if self.match_candidate_threshold >= self.match_final_threshold:
+            raise ValueError(
+                f"match_candidate_threshold ({self.match_candidate_threshold}) "
+                f"must be < match_final_threshold ({self.match_final_threshold})"
+            )

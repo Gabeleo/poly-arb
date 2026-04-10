@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 import httpx
 
 from polyarb.data.base import group_events
 from polyarb.models import Event, Market, Side, Token
+
+logger = logging.getLogger(__name__)
 
 GAMMA_API = "https://gamma-api.polymarket.com"
 _DEFAULT_SPREAD = 0.02
@@ -42,8 +45,14 @@ def _parse_market(raw: dict) -> Market | None:
 
     raw_bid = raw.get("bestBid")
     raw_ask = raw.get("bestAsk")
+    synthetic = not raw_bid or not raw_ask
     best_bid = float(raw_bid) if raw_bid else round(max(0.001, yes_mid - _DEFAULT_SPREAD / 2), 4)
     best_ask = float(raw_ask) if raw_ask else round(min(0.999, yes_mid + _DEFAULT_SPREAD / 2), 4)
+    if synthetic:
+        logger.warning(
+            "Using synthetic spread for %s (no book data)",
+            raw.get("conditionId", raw.get("id", "?")),
+        )
 
     event_slug = ""
     events = raw.get("events") or []
@@ -105,22 +114,37 @@ class AsyncLiveDataProvider:
         return resp.json()
 
     async def get_active_markets(self) -> list[Market]:
-        data = await self._fetch_json(
-            "/markets",
-            {
-                "limit": str(self._limit),
-                "order": "volumeNum",
-                "ascending": "false",
-                "active": "true",
-                "closed": "false",
-            },
-        )
-        raw_list = data if isinstance(data, list) else [data]
-        markets = []
-        for raw in raw_list:
-            m = _parse_market(raw)
-            if m is not None:
-                markets.append(m)
+        markets: list[Market] = []
+        page_size = min(self._limit, 100)
+        offset = 0
+        max_pages = 20  # safety cap
+
+        for _ in range(max_pages):
+            data = await self._fetch_json(
+                "/markets",
+                {
+                    "limit": str(page_size),
+                    "offset": str(offset),
+                    "order": "volumeNum",
+                    "ascending": "false",
+                    "active": "true",
+                    "closed": "false",
+                },
+            )
+            raw_list = data if isinstance(data, list) else [data]
+            page_count = 0
+            for raw in raw_list:
+                m = _parse_market(raw)
+                if m is not None:
+                    markets.append(m)
+                page_count += 1
+
+            if page_count < page_size:
+                break  # last page
+            offset += page_count
+            if len(markets) >= self._limit:
+                break
+
         markets.sort(key=lambda m: m.volume)
         return markets
 

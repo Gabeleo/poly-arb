@@ -9,6 +9,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from polyarb.observability import metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +49,8 @@ async def telegram_webhook(request: Request) -> JSONResponse:
             approval_id = data.split(":", 1)[1]
             await approval_manager.handle_reject(approval_id)
     except Exception:
-        logger.exception("Webhook handler error")
+        logger.exception("Webhook handler error for callback data=%s", data)
+        metrics.webhook_errors.inc()
     finally:
         if callback_id:
             with contextlib.suppress(Exception):
