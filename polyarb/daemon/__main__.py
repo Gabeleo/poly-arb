@@ -54,7 +54,10 @@ def main() -> None:  # noqa: C901
 
     db_engine = create_db_engine(settings.database_url)
     metadata.create_all(db_engine)
+    from polyarb.db.repositories.positions import SqlitePositionRepository
+
     match_repo = SqliteMatchSnapshotRepository(db_engine)
+    position_repo = SqlitePositionRepository(db_engine)
     audit_repo = SqliteAuditRepository(db_engine)
     audit_logger = AuditLogger(repo=audit_repo)
     logger.info("Database: %s", settings.database_url)
@@ -138,6 +141,7 @@ def main() -> None:  # noqa: C901
                 stop_event=stop_event,
                 biencoder=biencoder,
                 match_repo=match_repo,
+                position_repo=position_repo,
             )
         )
         logger.info("Scan loop started (interval=%.1fs)", config.scan_interval)

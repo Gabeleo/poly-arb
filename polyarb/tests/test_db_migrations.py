@@ -20,6 +20,12 @@ def _alembic_config(db_path: str) -> AlembicConfig:
     return cfg
 
 
+@pytest.fixture(autouse=True)
+def _clear_database_url(monkeypatch):
+    """Prevent env.py from overriding the SQLite URL with DATABASE_URL."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+
 @pytest.fixture
 def db_path(tmp_path):
     return str(tmp_path / "migration_test.db")

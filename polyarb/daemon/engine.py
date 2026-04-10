@@ -183,12 +183,28 @@ async def _detect_opportunities(all_markets: list[Market], config):
     return single_opps + multi_opps
 
 
+def _update_position_metrics(position_repo) -> None:
+    """Update per-platform position value gauge from open positions."""
+    try:
+        positions = position_repo.get_open_positions()
+        totals: dict[str, float] = {}
+        for p in positions:
+            totals[p["platform"]] = totals.get(p["platform"], 0.0) + (
+                p["quantity"] * p["avg_price"]
+            )
+        for platform, value in totals.items():
+            metrics.position_value_dollars.labels(platform=platform).set(value)
+    except Exception:
+        logger.debug("Could not update position metrics", exc_info=True)
+
+
 async def _publish_results(
     state: State,
     matches: list[MatchedPair],
     all_opps,
     approval_manager,
     match_repo=None,
+    position_repo=None,
     scan_ts: str | None = None,
     scan_id: str | None = None,
 ) -> None:
@@ -251,6 +267,10 @@ async def _publish_results(
         except Exception:
             logger.exception("Failed to record match snapshots")
 
+    # Update position value gauge
+    if position_repo is not None:
+        await asyncio.to_thread(_update_position_metrics, position_repo)
+
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -265,6 +285,7 @@ async def run_scan_once(
     kalshi_cb: CircuitBreaker | None = None,
     biencoder=None,
     match_repo=None,
+    position_repo=None,
 ) -> None:
     """Fetch from both providers, detect matches and opportunities, update state."""
     poly_cb = poly_cb or _MetricsCircuitBreaker("poly")
@@ -296,6 +317,7 @@ async def run_scan_once(
                 all_opps,
                 approval_manager,
                 match_repo=match_repo,
+                position_repo=position_repo,
                 scan_ts=scan_ts,
                 scan_id=sid,
             )
@@ -315,6 +337,7 @@ async def run_scan_loop(
     stop_event: asyncio.Event | None = None,
     biencoder=None,
     match_repo=None,
+    position_repo=None,
 ) -> None:
     """Continuous scan loop with graceful shutdown support.
 
@@ -341,6 +364,7 @@ async def run_scan_loop(
                 kalshi_cb,
                 biencoder=biencoder,
                 match_repo=match_repo,
+                position_repo=position_repo,
             )
 
             # Hourly digest of top single-platform opps

@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck fmt build run
+.PHONY: install test lint typecheck fmt build run migrate
 
 install:
 	pip install -e ".[dev]"
@@ -20,3 +20,6 @@ build:
 
 run:
 	docker compose up
+
+migrate:
+	alembic upgrade head

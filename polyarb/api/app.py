@@ -10,6 +10,8 @@ from starlette.middleware import Middleware
 from starlette.routing import Route
 
 from polyarb.api.middleware.auth import ApiKeyMiddleware
+from polyarb.api.middleware.cors import CORSMiddleware
+from polyarb.api.middleware.logging import LoggingMiddleware
 from polyarb.api.middleware.rate_limit import RateLimitMiddleware
 from polyarb.api.openapi import openapi_spec
 from polyarb.api.routes import (
@@ -57,7 +59,9 @@ def create_app(
     ]
 
     middleware = [
-        Middleware(RequestIdMiddleware),  # outermost — sets request_id first
+        Middleware(CORSMiddleware),  # outermost — handles preflight before anything
+        Middleware(RequestIdMiddleware),  # sets request_id for downstream use
+        Middleware(LoggingMiddleware),  # structured access log per request
         Middleware(MetricsMiddleware),  # times everything below
         Middleware(RateLimitMiddleware),  # rate check before auth
     ]
