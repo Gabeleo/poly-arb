@@ -68,12 +68,18 @@ class MarketFactory:
             condition_id=cid,
             question=question,
             yes_token=Token(
-                f"y-{cid}", Side.YES, yes_mid,
-                round(yes_mid - half, 4), round(yes_mid + half, 4),
+                f"y-{cid}",
+                Side.YES,
+                yes_mid,
+                round(yes_mid - half, 4),
+                round(yes_mid + half, 4),
             ),
             no_token=Token(
-                f"n-{cid}", Side.NO, no_mid,
-                round(no_mid - half, 4), round(no_mid + half, 4),
+                f"n-{cid}",
+                Side.NO,
+                no_mid,
+                round(no_mid - half, 4),
+                round(no_mid + half, 4),
             ),
             platform=platform,
         )

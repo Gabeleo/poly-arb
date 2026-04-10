@@ -36,7 +36,7 @@ def _make_journal():
 async def test_both_legs_fill():
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -53,7 +53,7 @@ async def test_both_legs_fill_with_journal():
     try:
         kalshi = FakeKalshiClient()
         poly = FakePolyClient()
-        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
 
         result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -74,7 +74,7 @@ async def test_both_legs_fill_with_journal():
 async def test_both_legs_fail():
     kalshi = FakeKalshiClient(fail=True)
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -90,7 +90,7 @@ async def test_both_legs_fail():
 async def test_kalshi_fills_poly_fails_unwinds():
     kalshi = FakeKalshiClient()
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -103,7 +103,7 @@ async def test_kalshi_fills_poly_fails_unwinds():
 async def test_kalshi_fills_poly_fails_unwind_fails():
     kalshi = FakeKalshiClient(cancel_fail=True)
     poly = FakePolyClient(fail=True)
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -119,7 +119,7 @@ async def test_kalshi_fills_poly_fails_unwind_fails():
 async def test_poly_fills_kalshi_fails_unwinds():
     kalshi = FakeKalshiClient(fail=True)
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 
@@ -136,7 +136,7 @@ async def test_kelly_sizing_with_bankroll():
     """When bankroll is set, Kelly sizing should be used."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     config = Config(bankroll=1000.0, kelly_fraction=0.5, max_position=100.0)
     result = await executor.execute(_profitable_match(), config)
@@ -152,7 +152,7 @@ async def test_kelly_too_small_rejects():
     """When edge is too small for Kelly, execution is rejected."""
     kalshi = FakeKalshiClient()
     poly = FakePolyClient()
-    executor = CrossExecutor(kalshi=kalshi, poly=poly)
+    executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
     # Very small bankroll → Kelly size < 1 contract
     config = Config(bankroll=1.0, kelly_fraction=0.01, max_position=100.0)
@@ -171,7 +171,7 @@ async def test_idempotency_prevents_duplicate():
     try:
         kalshi = FakeKalshiClient()
         poly = FakePolyClient()
-        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
         match = _profitable_match()
         config = Config(order_size=10.0)
 
@@ -197,7 +197,7 @@ async def test_journal_records_failure():
     try:
         kalshi = FakeKalshiClient(fail=True)
         poly = FakePolyClient(fail=True)
-        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)
+        executor = CrossExecutor(kalshi=kalshi, poly=poly, journal=journal)  # type: ignore[arg-type]
 
         result = await executor.execute(_profitable_match(), Config(order_size=10.0))
 

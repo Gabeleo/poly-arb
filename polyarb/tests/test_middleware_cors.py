@@ -68,9 +68,7 @@ class TestCORSMiddleware:
         monkeypatch.setenv("CORS_ORIGINS", "https://dashboard.example.com")
         app = _make_app()
         client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get(
-            "/test", headers={"Origin": "https://dashboard.example.com"}
-        )
+        resp = client.get("/test", headers={"Origin": "https://dashboard.example.com"})
         assert resp.headers.get("access-control-allow-origin") == "https://dashboard.example.com"
         # Default origin should now be rejected
         resp2 = client.get("/test", headers={"Origin": "http://localhost:3000"})

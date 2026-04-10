@@ -108,7 +108,7 @@ async def test_scan_encoder_down_returns_no_matches():
     encoder = FakeEncoderClient(scores=None)  # simulate encoder down
     state = State(config=Config(match_final_threshold=0.3))
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     # Fallback uses candidate confidence (0.0 from generate_all_pairs) → filtered out
     assert len(state.matches) == 0
@@ -117,19 +117,23 @@ async def test_scan_encoder_down_returns_no_matches():
 @pytest.mark.asyncio
 async def test_scan_with_encoder_scoring():
     """Encoder scores filter candidates below threshold."""
-    poly = FakeAsyncProvider([
-        _mkt("p1", "Will Bitcoin hit 100k?"),
-        _mkt("p2", "Will GDP grow 3%?"),
-    ])
-    kalshi = FakeAsyncProvider([
-        _mkt("k1", "Will Bitcoin hit 100k?", "kalshi"),
-        _mkt("k2", "Will GDP grow 3%?", "kalshi"),
-    ])
+    poly = FakeAsyncProvider(
+        [
+            _mkt("p1", "Will Bitcoin hit 100k?"),
+            _mkt("p2", "Will GDP grow 3%?"),
+        ]
+    )
+    kalshi = FakeAsyncProvider(
+        [
+            _mkt("k1", "Will Bitcoin hit 100k?", "kalshi"),
+            _mkt("k2", "Will GDP grow 3%?", "kalshi"),
+        ]
+    )
     # High scores for both pairs
     encoder = FakeEncoderClient(scores=[0.95] * 10)
     state = State(config=Config(match_final_threshold=0.5))
 
-    await run_scan_once(state, poly, kalshi, encoder_client=encoder)
+    await run_scan_once(state, poly, kalshi, encoder_client=encoder)  # type: ignore[arg-type]
 
     assert len(state.matches) == 2
 
@@ -155,15 +159,19 @@ async def test_scan_provider_failure_handled():
 @pytest.mark.asyncio
 async def test_scan_multiple_markets_best_match():
     """Each Poly market gets at most one Kalshi match (1:1)."""
-    poly = FakeAsyncProvider([
-        _mkt("p1", "Will the election result in a landslide?"),
-        _mkt("p2", "Will inflation exceed 5%?"),
-    ])
-    kalshi = FakeAsyncProvider([
-        _mkt("k1", "Will the election result in a landslide?", "kalshi"),
-        _mkt("k2", "Will inflation exceed 5%?", "kalshi"),
-        _mkt("k3", "Will the election be close?", "kalshi"),
-    ])
+    poly = FakeAsyncProvider(
+        [
+            _mkt("p1", "Will the election result in a landslide?"),
+            _mkt("p2", "Will inflation exceed 5%?"),
+        ]
+    )
+    kalshi = FakeAsyncProvider(
+        [
+            _mkt("k1", "Will the election result in a landslide?", "kalshi"),
+            _mkt("k2", "Will inflation exceed 5%?", "kalshi"),
+            _mkt("k3", "Will the election be close?", "kalshi"),
+        ]
+    )
     state = State(config=Config(match_final_threshold=0.3))
 
     await run_scan_once(state, poly, kalshi)

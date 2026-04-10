@@ -81,8 +81,18 @@ def test_compute_arb_returns_best_direction(py_ask, pn_ask, ky_ask, kn_ask):
     assert result is not None
     # Check that the other direction is not more profitable
     fees = FeeParams()
-    dir_a_profit = 1.0 - (py_ask + kn_ask) - poly_taker_fee(py_ask, fees.poly_fee_rate) - kalshi_entry_fee(kn_ask, fees.kalshi_fee_cap)
-    dir_b_profit = 1.0 - (pn_ask + ky_ask) - poly_taker_fee(pn_ask, fees.poly_fee_rate) - kalshi_entry_fee(ky_ask, fees.kalshi_fee_cap)
+    dir_a_profit = (
+        1.0
+        - (py_ask + kn_ask)
+        - poly_taker_fee(py_ask, fees.poly_fee_rate)
+        - kalshi_entry_fee(kn_ask, fees.kalshi_fee_cap)
+    )
+    dir_b_profit = (
+        1.0
+        - (pn_ask + ky_ask)
+        - poly_taker_fee(pn_ask, fees.poly_fee_rate)
+        - kalshi_entry_fee(ky_ask, fees.kalshi_fee_cap)
+    )
     expected_profit = max(dir_a_profit, dir_b_profit)
     assert abs(result.net_profit - round(expected_profit, 6)) < 1e-5
 
