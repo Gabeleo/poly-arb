@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  DAEMON_IMAGE: ghcr.io/${{ github.repository }}/daemon
+  ENCODER_IMAGE: ghcr.io/${{ github.repository }}/encoder
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" psycopg2-binary
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: alembic upgrade head
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Update daemon deployment image
+        run: |
+          kubectl set image deployment/polyarb-daemon \
+            daemon=${{ env.DAEMON_IMAGE }}:${{ github.sha }} \
+            -n polyarb
+
+      - name: Update encoder deployment image
+        run: |
+          kubectl set image deployment/polyarb-encoder \
+            encoder=${{ env.ENCODER_IMAGE }}:${{ github.sha }} \
+            -n polyarb
+
+      - name: Wait for daemon rollout
+        run: kubectl rollout status deployment/polyarb-daemon -n polyarb --timeout=120s
+
+      - name: Wait for encoder rollout
+        run: kubectl rollout status deployment/polyarb-encoder -n polyarb --timeout=120s
+
+      - name: Smoke test
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+        run: |
+          for i in 1 2 3 4 5; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/health/ready")
+            if [ "$status" = "200" ]; then
+              echo "Smoke test passed"
+              exit 0
+            fi
+            echo "Attempt $i: got $status, retrying..."
+            sleep 5
+          done
+          echo "Smoke test failed after 5 attempts"
+          exit 1

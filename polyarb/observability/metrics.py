@@ -81,6 +81,13 @@ orphaned_legs = Gauge(
     "Number of execution legs in orphaned/sent state",
 )
 
+# Positions
+position_value_dollars = Gauge(
+    "polyarb_position_value_dollars",
+    "Capital deployed (quantity * avg_price) by platform",
+    ["platform"],
+)
+
 # Database
 db_size_bytes = Gauge(
     "polyarb_db_size_bytes",
