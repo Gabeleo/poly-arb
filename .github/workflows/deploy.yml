@@ -13,8 +13,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  DAEMON_IMAGE: ghcr.io/${{ github.repository }}/daemon
-  ENCODER_IMAGE: ghcr.io/${{ github.repository }}/encoder
 
 jobs:
   deploy:
@@ -23,6 +21,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set image names
+        run: |
+          echo "DAEMON_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/daemon" >> "$GITHUB_ENV"
+          echo "ENCODER_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/encoder" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
