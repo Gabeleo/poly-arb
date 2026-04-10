@@ -6,6 +6,8 @@ public interface so CrossExecutor and existing tests need no changes.
 
 from __future__ import annotations
 
+import sqlite3
+
 from polyarb.observability import metrics
 
 
@@ -22,14 +24,12 @@ class ExecutionJournal:
         self._engine = create_engine(url)
         metadata.create_all(self._engine)
         self._repo = SqliteExecutionRepository(self._engine)
-        self._raw_conn = None  # lazy, for test introspection only
+        self._raw_conn: sqlite3.Connection | None = None  # lazy, for test introspection only
 
     @property
-    def _conn(self):
+    def _conn(self) -> sqlite3.Connection:
         """Raw SQLite connection for test introspection. Uses the engine's pool."""
         if self._raw_conn is None:
-            import sqlite3
-
             self._raw_conn = sqlite3.connect(self._db_path)
             self._raw_conn.row_factory = sqlite3.Row
         return self._raw_conn
