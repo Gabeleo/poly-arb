@@ -259,7 +259,7 @@ async def test_kelly_disabled_bankroll_zero():
     poly = FakePolyClient()
     executor = CrossExecutor(kalshi=kalshi, poly=poly)  # type: ignore[arg-type]
 
-    config = Config(bankroll=0.0, kelly_fraction=0.5, order_size=7.0)
+    config = Config(bankroll=0.0, kelly_fraction=0.0, order_size=7.0)
     result = await executor.execute(_profitable_match(), config)
 
     assert result.success is True

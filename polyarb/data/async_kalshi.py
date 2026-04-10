@@ -169,30 +169,44 @@ class AsyncKalshiDataProvider:
 
         Uses /events?with_nested_markets=true so we get event titles
         and can determine mutually_exclusive (-> neg_risk) up front.
+        Paginates using the cursor returned by the Kalshi API.
         """
-        data = await self._fetch_json(
-            "/events",
-            {
-                "limit": str(min(self._limit, 200)),
+        markets: list[Market] = []
+        page_size = min(self._limit, 200)
+        cursor: str | None = None
+        max_pages = 20  # safety cap
+
+        for _ in range(max_pages):
+            params: dict[str, str] = {
+                "limit": str(page_size),
                 "status": "open",
                 "with_nested_markets": "true",
-            },
-        )
+            }
+            if cursor:
+                params["cursor"] = cursor
 
-        markets: list[Market] = []
-        for evt in data.get("events", []):
-            event_ticker = evt.get("event_ticker", "")
-            event_title = evt.get("title", event_ticker)
-            mutually_exclusive = evt.get("mutually_exclusive", False)
-            raw_markets = evt.get("markets", [])
+            data = await self._fetch_json("/events", params)
 
-            self._event_titles[event_ticker] = event_title
-            is_neg_risk = mutually_exclusive and len(raw_markets) > 1
+            events = data.get("events", [])
+            for evt in events:
+                event_ticker = evt.get("event_ticker", "")
+                event_title = evt.get("title", event_ticker)
+                mutually_exclusive = evt.get("mutually_exclusive", False)
+                raw_markets = evt.get("markets", [])
 
-            for raw_mkt in raw_markets:
-                m = _parse_market(raw_mkt, event_title=event_title, neg_risk=is_neg_risk)
-                if m is not None:
-                    markets.append(m)
+                self._event_titles[event_ticker] = event_title
+                is_neg_risk = mutually_exclusive and len(raw_markets) > 1
+
+                for raw_mkt in raw_markets:
+                    m = _parse_market(raw_mkt, event_title=event_title, neg_risk=is_neg_risk)
+                    if m is not None:
+                        markets.append(m)
+
+            cursor = data.get("cursor")
+            if not cursor or len(events) < page_size:
+                break
+            if len(markets) >= self._limit:
+                break
 
         markets.sort(key=lambda m: m.volume)
         return markets

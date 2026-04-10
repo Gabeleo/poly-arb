@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -12,6 +13,10 @@ from polyarb.matching.matcher import MatchedPair
 from polyarb.models import Opportunity
 
 logger = logging.getLogger(__name__)
+
+
+def _make_lock() -> asyncio.Lock:
+    return asyncio.Lock()
 
 
 @dataclass
@@ -27,6 +32,7 @@ class State:
     biencoder_enabled: bool = False
     _seen_matches: dict[str, float] = field(default_factory=dict)
     _seen_opps: dict[str, float] = field(default_factory=dict)
+    _ws_lock: asyncio.Lock = field(default_factory=_make_lock, repr=False)
 
     def _prune(self, seen: dict[str, float]) -> dict[str, float]:
         """Remove entries older than ``dedup_window`` seconds."""
@@ -64,18 +70,27 @@ class State:
                 new.append(o)
         return new
 
+    async def add_ws_client(self, ws) -> None:
+        async with self._ws_lock:
+            self.ws_clients.add(ws)
+
+    async def remove_ws_client(self, ws) -> None:
+        async with self._ws_lock:
+            self.ws_clients.discard(ws)
+
     async def broadcast(self, message: dict) -> None:
         """Send message dict to all WS clients; remove dead connections."""
-        dead: set = set()
-        for ws in self.ws_clients:
-            try:
-                await ws.send_json(message)
-            except Exception:
-                logger.debug("Removing dead WS client: %s", ws)
-                dead.add(ws)
-        if dead:
-            logger.info("Pruned %d dead WebSocket client(s)", len(dead))
-        self.ws_clients -= dead
+        async with self._ws_lock:
+            dead: set = set()
+            for ws in self.ws_clients:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    logger.debug("Removing dead WS client: %s", ws)
+                    dead.add(ws)
+            if dead:
+                logger.info("Pruned %d dead WebSocket client(s)", len(dead))
+            self.ws_clients -= dead
 
     def status_dict(self) -> dict:
         """Return current status as a JSON-serializable dict."""

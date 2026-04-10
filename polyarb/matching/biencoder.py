@@ -10,6 +10,7 @@ cross-encoder sees fewer pairs.
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
 
 import numpy as np
@@ -36,28 +37,32 @@ class BiEncoderFilter:
         self._model = SentenceTransformer(model_name)
         self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self._max_cache = max_cache_entries
+        self._lock = threading.Lock()
 
     def _get_embeddings(self, sentences: list[str]) -> dict[str, np.ndarray]:
         """Encode sentences, using cache where possible.
 
         Returns a mapping from sentence text to its embedding vector.
         """
-        to_encode: list[str] = []
-        for s in sentences:
-            if s not in self._cache:
-                to_encode.append(s)
+        with self._lock:
+            to_encode: list[str] = []
+            for s in sentences:
+                if s not in self._cache:
+                    to_encode.append(s)
 
         if to_encode:
             vectors = self._model.encode(to_encode, batch_size=64)
-            for s, vec in zip(to_encode, vectors, strict=True):
-                self._cache[s] = vec
-                self._cache.move_to_end(s)
+            with self._lock:
+                for s, vec in zip(to_encode, vectors, strict=True):
+                    self._cache[s] = vec
+                    self._cache.move_to_end(s)
 
-        # Evict oldest entries if cache is over capacity
-        while len(self._cache) > self._max_cache:
-            self._cache.popitem(last=False)
+                # Evict oldest entries if cache is over capacity
+                while len(self._cache) > self._max_cache:
+                    self._cache.popitem(last=False)
 
-        return {s: self._cache[s] for s in sentences}
+        with self._lock:
+            return {s: self._cache[s] for s in sentences}
 
     def filter_candidates(
         self,
