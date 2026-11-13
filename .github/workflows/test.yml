@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" psycopg2-binary
+        run: pip install -e ".[dev]" "psycopg[binary]>=3.1"
 
       - name: Run Alembic migrations
         env:
